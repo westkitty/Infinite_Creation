@@ -12,6 +12,8 @@ import { ModelViewer } from './three/ModelViewer';
 import { captureViewerSnapshot } from './three/snapshotBridge';
 import { ExportWorkspace } from './components/ExportWorkspace';
 import { downloadText, exportWorkflowJSON, importWorkflowJSON, pickFile } from './export/workflowJson';
+import { loadSampleProject } from './samples/loader';
+import { revokeAllUrls } from './assets/repository';
 import { useGraphStore } from './stores/graphStore';
 import { useUIStore } from './stores/uiStore';
 import { useExecStore } from './stores/execStore';
@@ -57,6 +59,7 @@ export default function App() {
   const openProject = useCallback(async (id: string) => {
     const loaded = await loadProject(id);
     if (!loaded) return;
+    revokeAllUrls();
     useGraphStore.getState().loadProject(loaded.meta.id, loaded.meta.name, loaded.graph ?? emptyGraph(), loaded.timeline ?? defaultTimeline());
     setSaveStatus('saved');
     setProjectsOpen(false);
@@ -119,7 +122,18 @@ export default function App() {
       }
     })();
   }, [log]);
-  const handleSample = useCallback((_id: string) => { log('Sample projects arrive in Phase 8 (after the pipeline works).'); }, [log]);
+  const handleSample = useCallback((id: string) => {
+    if (id !== 'A' && id !== 'B' && id !== 'C') return;
+    void (async () => {
+      try {
+        const s = await loadSampleProject(id);
+        log(`Sample loaded: ${s.name} — ${s.description}`);
+        await openProject(s.projectId);
+      } catch (e) {
+        log(`Sample load failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+  }, [log, openProject]);
 
   return (
     <div className="app">

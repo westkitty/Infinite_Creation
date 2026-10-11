@@ -67,7 +67,7 @@ export function ExportWorkspace() {
       const data = await readProjectArchive(f, setProgress);
       const newId = await storeImportedArchive(data);
       for (const w of data.warnings) log(`Archive warning: ${w}`);
-      log(`Archive imported as a new project ("${data.name}", ${data.assets.length} assets, ${data.blobs.size} binaries verified).`);
+      log(`Archive imported as a new project ("${data.name}", ${data.assets.length} assets, ${data.binaries.size} binaries verified).`);
       onOpen(newId);
     } catch (e) {
       log(`Archive import failed (existing projects untouched): ${e instanceof Error ? e.message : String(e)}`);

@@ -64,8 +64,6 @@ export function PreviewPanel() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [split, setSplit] = useState(50);
-  const compareMode = useExecStore((s) => s.outputs) && useCompareToggle();
-  void compareMode;
 
   // Before image: first upstream image output.
   const beforeUrl = useMemo(() => {
@@ -139,10 +137,6 @@ export function PreviewPanel() {
       </div>
     </div>
   );
-}
-
-function useCompareToggle(): boolean {
-  return false;
 }
 
 function ZoomStage(props: {

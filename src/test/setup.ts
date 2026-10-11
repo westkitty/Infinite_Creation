@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import 'fake-indexeddb/auto';
 
 // jsdom lacks these browser APIs; provide minimal shims for unit tests.
 if (typeof globalThis.URL.createObjectURL !== 'function') {
@@ -13,5 +14,3 @@ if (typeof globalThis.URL.createObjectURL !== 'function') {
     map.delete(url);
   }) as typeof URL.revokeObjectURL;
 }
-
-// Dexie needs indexedDB; tests that touch the DB use the fake in each test file.

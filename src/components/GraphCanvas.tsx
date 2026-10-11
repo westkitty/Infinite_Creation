@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap, Panel,
+  ReactFlow, Background, Controls, MiniMap, Panel, ReactFlowProvider, useReactFlow,
   useNodesState, useEdgesState, type Node, type Edge, type Connection, type NodeChange, type EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -14,6 +14,14 @@ import { SubgraphsModal } from './SubgraphsModal';
 const nodeTypes = { studio: StudioNode };
 
 export function GraphCanvas() {
+  return (
+    <ReactFlowProvider>
+      <GraphCanvasInner />
+    </ReactFlowProvider>
+  );
+}
+
+function GraphCanvasInner() {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const viewport = useGraphStore((s) => s.viewport);
@@ -127,14 +135,14 @@ export function GraphCanvas() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const { screenToFlowPosition } = useReactFlow();
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const type = e.dataTransfer.getData('application/ics-node');
     if (!type) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    // approximate screen->flow coords (ReactFlow instance would be exact; offset is acceptable)
-    store.getState().addNode(type, { x: Math.round(e.clientX - rect.left - 90 + (0 - viewport.x)), y: Math.round(e.clientY - rect.top - 40 + (0 - viewport.y)) });
-  }, [viewport.x, viewport.y]);
+    const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    store.getState().addNode(type, { x: Math.round(pos.x - 90), y: Math.round(pos.y - 30) });
+  }, [screenToFlowPosition]);
 
   return (
     <div className="canvas-wrap" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
@@ -165,7 +173,7 @@ export function GraphCanvas() {
         <Controls />
         <Panel position="top-left">
           <div className="canvas-toolbar" style={{ position: 'static' }}>
-            <button className="btn ghost" title="Add node (browse in left panel)" onClick={() => useUIStore.getState().setPaletteOpen(true)}>+ Node</button>
+            <button className="btn ghost" title="Add node — search every node (Ctrl K)" aria-label="Add node" onClick={() => useUIStore.getState().setCommandPaletteOpen(true)}>+ Node</button>
             <button className="btn ghost" title={`Snap to grid: ${snap ? 'on' : 'off'}`} onClick={() => useUIStore.getState().toggleSnap()}>Snap {snap ? 'On' : 'Off'}</button>
             <SubgraphButton />
           </div>

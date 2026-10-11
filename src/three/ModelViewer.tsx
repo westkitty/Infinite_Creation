@@ -121,7 +121,7 @@ export function ModelViewer() {
         <label style={{ fontSize: 12 }}><input type="checkbox" checked={grid} onChange={(e) => setGrid(e.target.checked)} /> grid</label>
         <button className="btn" onClick={() => apiRef.current?.resetCamera()}>Reset camera</button>
         <button className="btn" onClick={() => apiRef.current?.fit()}>Fit model</button>
-        <button className="btn primary" disabled={!apiRef.current} onClick={() => void snapshot()}>Snapshot to library</button>
+        <button className="btn primary" disabled={!stats || !projectId} onClick={() => void snapshot()}>Snapshot to library</button>
       </div>
       {animations.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>

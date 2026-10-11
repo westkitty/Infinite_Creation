@@ -19,7 +19,12 @@ function StudioNodeInner({ data, selected }: NodeProps) {
   if (!def) return <div className="studio-node"><div className="head"><span className="title">Unknown: {d.nodeType}</span></div></div>;
   const title = d.label || def.label;
   return (
-    <div className={`studio-node${selected ? ' selected' : ''}${d.disabled ? ' disabled' : ''}${def.unavailable ? ' unavailable' : ''}`}>
+    <div
+      className={`studio-node${selected ? ' selected' : ''}${d.disabled ? ' disabled' : ''}${def.unavailable ? ' unavailable' : ''}`}
+      role="group"
+      aria-label={`${title} (${def.family}), status ${status}`}
+      title={def.description}
+    >
       <div className="head">
         <span className={`status ${status}`} title={`Status: ${status}${out?.stale ? ' (stale)' : ''}`} aria-label={`Status ${status}`} />
         <span className="title" title={def.description}>{title}</span>

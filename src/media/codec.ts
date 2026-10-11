@@ -30,16 +30,26 @@ function imageValueToCanvas(img: ImageValue): HTMLCanvasElement {
 }
 
 export async function encodeImage(img: ImageValue, format: ExportFormat, quality = 0.92): Promise<Uint8Array> {
-  if (format === 'png' && !hasDocument()) return encodePNG(img);
-  if (!hasDocument()) throw new Error(`${format} encoding requires a browser canvas`);
-  const canvas = imageValueToCanvas(img);
-  const mime = mimeFor(format);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, quality));
-  if (!blob) {
-    if (format === 'png') return encodePNG(img); // last-resort fallback
-    throw new Error(`Browser cannot encode ${mime} (format unsupported here)`);
+  if (format === 'png') {
+    try {
+      if (!hasDocument()) return encodePNG(img);
+      const canvas = imageValueToCanvas(img);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) return encodePNG(img);
+      return new Uint8Array(await blob.arrayBuffer());
+    } catch {
+      return encodePNG(img); // canvas unavailable/broken (workers, tests) — pure encoder
+    }
   }
-  return new Uint8Array(await blob.arrayBuffer());
+  if (!hasDocument()) throw new Error(`${format} encoding requires a browser canvas`);
+  try {
+    const canvas = imageValueToCanvas(img);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeFor(format), quality));
+    if (!blob) throw new Error(`Browser cannot encode ${mimeFor(format)} (format unsupported here)`);
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch (e) {
+    throw new Error(`JPEG/WebP encoding failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 export async function decodeImageBlob(blob: Blob): Promise<ImageValue> {

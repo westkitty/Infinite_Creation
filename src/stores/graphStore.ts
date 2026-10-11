@@ -142,6 +142,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   removeNodes: (ids) => {
     const setIds = new Set(ids);
+    for (const id of ids) resultCache.invalidate(id);
+    useExecStore.getState().forgetNodes(ids);
     set((s) => ({
       ...pushHistory(s),
       nodes: s.nodes.filter((n) => !setIds.has(n.id)),

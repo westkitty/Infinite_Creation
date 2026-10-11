@@ -36,6 +36,7 @@ interface ExecState {
   clearLogs: () => void;
   bumpCache: (kind: 'hits' | 'misses' | 'evictions') => void;
   resetRun: () => void;
+  forgetNodes: (ids: string[]) => void;
 }
 
 export const useExecStore = create<ExecState>((set) => ({
@@ -68,4 +69,15 @@ export const useExecStore = create<ExecState>((set) => ({
   clearLogs: () => set({ diagnostics: [] }),
   bumpCache: (kind) => set((s) => ({ cacheStats: { ...s.cacheStats, [kind]: s.cacheStats[kind] + 1 } })),
   resetRun: () => set({ running: false, runId: null, progress: { done: 0, total: 0 } }),
+  forgetNodes: (ids) =>
+    set((s) => {
+      const drop = new Set(ids);
+      const pick = <T,>(obj: Record<string, T>): Record<string, T> =>
+        Object.fromEntries(Object.entries(obj).filter(([k]) => !drop.has(k)));
+      return {
+        nodeStatus: pick(s.nodeStatus),
+        nodeRuns: pick(s.nodeRuns),
+        outputs: pick(s.outputs),
+      };
+    }),
 }));

@@ -39,6 +39,38 @@ export interface ImportResult {
   warning?: string;
 }
 
+/** Read a Blob/File into bytes with fallbacks for runtimes with partial Blob APIs. */
+export async function blobToBytes(blob: Blob): Promise<Uint8Array> {
+  const b = blob as unknown as {
+    arrayBuffer?: () => Promise<ArrayBuffer>;
+    bytes?: () => Promise<Uint8Array>;
+    stream?: () => ReadableStream<Uint8Array>;
+  };
+  if (typeof b.arrayBuffer === 'function') return new Uint8Array(await b.arrayBuffer());
+  if (typeof b.bytes === 'function') return new Uint8Array(await b.bytes());
+  if (typeof b.stream === 'function') {
+    const reader = b.stream().getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  }
+  throw new Error('Cannot read binary data in this runtime (Blob API incomplete)');
+}
+
+function toStoreBuffer(bytes: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(ab).set(bytes);
+  return ab;
+}
+
 export async function importFile(projectId: string, file: File | Blob, filename?: string): Promise<ImportResult> {
   const name = filename ?? (file instanceof File ? file.name : `import_${Date.now()}`);
   const mime = file.type || guessMime(name);
@@ -47,7 +79,7 @@ export async function importFile(projectId: string, file: File | Blob, filename?
   if (file.size <= 0) throw new Error(`"${name}" is empty (0 bytes)`);
   if (file.size > 500 * 1024 * 1024) throw new Error(`"${name}" exceeds the 500 MB import limit`);
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = await blobToBytes(file);
   const hash = await sha256Hex(bytes);
 
   // Deduplicate within the project by content hash.
@@ -95,10 +127,10 @@ export async function importFile(projectId: string, file: File | Blob, filename?
   try {
     await db.transaction('rw', [db.assets, db.blobs, db.thumbs], async () => {
       await db.assets.put({ ...record, projectId });
-      await db.blobs.put({ id, data: file });
+      await db.blobs.put({ id, data: toStoreBuffer(bytes) });
       if (kind === 'image') {
         const thumb = await makeThumbnail(file).catch(() => null);
-        if (thumb) await db.thumbs.put({ id, data: thumb.blob });
+        if (thumb) await db.thumbs.put({ id, data: toStoreBuffer(await blobToBytes(thumb.blob)) });
       }
     });
   } catch (e) {
@@ -189,14 +221,18 @@ export async function listAssets(projectId: string): Promise<AssetRecord[]> {
 }
 
 export async function getAssetBlob(assetId: string): Promise<Blob | null> {
-  const row = await db.blobs.get(assetId);
-  return row?.data ?? null;
+  const [asset, row] = await Promise.all([db.assets.get(assetId), db.blobs.get(assetId)]);
+  if (!row) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const B = globalThis.Blob as any;
+  if (!B) return null;
+  return new B([row.data], { type: asset?.mime ?? 'application/octet-stream' });
 }
 
 export async function getAssetBytes(assetId: string): Promise<Uint8Array | null> {
-  const blob = await getAssetBlob(assetId);
-  if (!blob) return null;
-  return new Uint8Array(await blob.arrayBuffer());
+  const row = await db.blobs.get(assetId);
+  if (!row) return null;
+  return new Uint8Array(row.data);
 }
 
 export async function storeDerivedAsset(
@@ -208,9 +244,9 @@ export async function storeDerivedAsset(
 ): Promise<AssetRecord> {
   const hash = await sha256Hex(bytes);
   const id = uid('a');
-  const ab = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(ab).set(bytes);
-  const blob = new Blob([ab], { type: mime });
+  const ab = toStoreBuffer(bytes);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blob = new (globalThis.Blob as any)([ab.slice(0)], { type: mime });
   const record: AssetRecord = {
     id, name, kind: meta.kind ?? 'derived', mime, size: bytes.length, hash,
     width: meta.width, height: meta.height,
@@ -219,10 +255,10 @@ export async function storeDerivedAsset(
   };
   await db.transaction('rw', [db.assets, db.blobs, db.thumbs], async () => {
     await db.assets.put({ ...record, projectId });
-    await db.blobs.put({ id, data: blob });
+    await db.blobs.put({ id, data: ab });
     if ((meta.kind ?? 'derived') === 'derived' || mime.startsWith('image/')) {
       const thumb = await makeThumbnail(blob).catch(() => null);
-      if (thumb) await db.thumbs.put({ id, data: thumb.blob });
+      if (thumb) await db.thumbs.put({ id, data: toStoreBuffer(await blobToBytes(thumb.blob)) });
     }
   });
   return record;
@@ -266,7 +302,13 @@ export async function thumbUrlFor(assetId: string): Promise<string | null> {
   const cached = urlCache.get(key);
   if (cached) return cached;
   const row = await db.thumbs.get(assetId);
-  const blob = row?.data ?? (await getAssetBlob(assetId));
+  if (row) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const url = URL.createObjectURL(new (globalThis.Blob as any)([row.data], { type: 'image/png' }));
+    urlCache.set(key, url);
+    return url;
+  }
+  const blob = await getAssetBlob(assetId);
   if (!blob) return null;
   const url = URL.createObjectURL(blob);
   urlCache.set(key, url);

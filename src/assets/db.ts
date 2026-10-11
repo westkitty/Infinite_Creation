@@ -21,12 +21,12 @@ export interface AssetRow extends AssetRecord {
 export interface BlobRow {
   /** Same id as the asset. Binary payload stored separately for lazy loading. */
   id: string;
-  data: Blob;
+  data: ArrayBuffer;
 }
 
 export interface ThumbRow {
   id: string;
-  data: Blob;
+  data: ArrayBuffer;
 }
 
 export interface RunRow extends RunRecord {

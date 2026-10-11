@@ -51,8 +51,8 @@ export async function exportProjectArchive(
   const zip = new JSZip();
   const checksums: Record<string, string> = {};
 
-  const put = async (path: string, data: string | Uint8Array | Blob) => {
-    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
+  const put = async (path: string, data: string | Uint8Array | ArrayBuffer) => {
+    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data instanceof ArrayBuffer ? new Uint8Array(data) : data;
     checksums[path] = await sha256Hex(bytes);
     zip.file(path, bytes);
   };
@@ -66,14 +66,14 @@ export async function exportProjectArchive(
   let i = 0;
   for (const a of assets) {
     onProgress?.({ phase: `asset ${a.name}`, done: i++, total: assets.length + 4 });
-    const blob = await db.blobs.get(a.id);
     const { projectId: _p, ...rec } = a;
     void _p;
-    if (!blob) {
+    const row = await db.blobs.get(a.id);
+    if (!row) {
       records.push({ ...rec, missing: true });
       continue;
     }
-    await put(`blobs/${a.id}.bin`, blob.data);
+    await put(`blobs/${a.id}.bin`, row.data);
     records.push({ ...rec, missing: false });
   }
   await put('assets.json', JSON.stringify(records, null, 2));
@@ -103,7 +103,8 @@ export interface ImportedArchive {
   name: string;
   description?: string;
   assets: AssetRecord[];
-  blobs: Map<string, Blob>;
+  /** Verified raw binaries (kept as bytes — no Blob round-trip needed). */
+  binaries: Map<string, Uint8Array>;
   warnings: string[];
 }
 
@@ -159,7 +160,7 @@ export async function readProjectArchive(
     if (parsed.success) assets.push(parsed.data);
     else warnings.push('One asset record failed validation and was skipped (binaries for valid assets kept)');
   }
-  const blobs = new Map<string, Blob>();
+  const binaries = new Map<string, Uint8Array>();
   for (const a of assets) {
     if (a.missing) {
       warnings.push(`Asset "${a.name}" was already missing at export time — relink it after import`);
@@ -178,11 +179,9 @@ export async function readProjectArchive(
       a.missing = true;
       continue;
     }
-    const ab = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(ab).set(bytes);
-    blobs.set(a.id, new Blob([ab], { type: a.mime }));
+    binaries.set(a.id, bytes);
   }
-  return { graph, timeline, name: meta.name ?? m.projectName, description: meta.description, assets, blobs, warnings };
+  return { graph, timeline, name: meta.name ?? m.projectName, description: meta.description, assets, binaries, warnings };
 }
 
 /** Store an imported archive as a brand-new project (collision-safe ids). */
@@ -203,8 +202,12 @@ export async function storeImportedArchive(data: ImportedArchive): Promise<strin
     });
     for (const a of data.assets) {
       await db.assets.put({ ...a, projectId: newProjectId });
-      const blob = data.blobs.get(a.id);
-      if (blob) await db.blobs.put({ id: a.id, data: blob });
+      const buf = data.binaries.get(a.id);
+      if (buf) {
+        const ab = new ArrayBuffer(buf.byteLength);
+        new Uint8Array(ab).set(buf);
+        await db.blobs.put({ id: a.id, data: ab });
+      }
     }
   });
   return newProjectId;

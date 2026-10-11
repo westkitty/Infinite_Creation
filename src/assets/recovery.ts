@@ -36,7 +36,8 @@ export async function relinkAsset(assetId: string, file: File | Blob, filename?:
   const row = await db.assets.get(assetId);
   if (!row) throw new Error(`Asset record ${assetId} not found`);
   if (file.size <= 0) throw new Error('Replacement file is empty');
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const { blobToBytes } = await import('./repository');
+  const bytes = await blobToBytes(file);
   const hash = await sha256Hex(bytes);
   const patch: { size: number; hash: string; missing: boolean; mime: string; name: string; width?: number; height?: number } = {
     size: file.size, hash, missing: false,
@@ -53,7 +54,9 @@ export async function relinkAsset(assetId: string, file: File | Blob, filename?:
     }
   }
   await db.transaction('rw', [db.assets, db.blobs], async () => {
-    await db.blobs.put({ id: assetId, data: file });
+    const ab = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(ab).set(bytes);
+    await db.blobs.put({ id: assetId, data: ab });
     await db.assets.update(assetId, patch);
   });
   const updated = await db.assets.get(assetId);

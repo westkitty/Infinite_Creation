@@ -119,13 +119,11 @@ export async function runOp(
     };
     try {
       worker.postMessage(payload, payload.images.map((i) => i.buffer));
-    } catch (e) {
+    } catch {
       pending.delete(jobId);
       workerFailed = true;
       // Retry on main thread transparently.
-      runOnMainThread(op, images, params);
       resolve(runOnMainThread(op, images, params));
-      void e;
     }
   });
 }
