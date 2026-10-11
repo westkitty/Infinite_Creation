@@ -6,6 +6,10 @@ import { ProjectsModal } from './components/ProjectsModal';
 import { CommandPalette } from './components/CommandPalette';
 import { AssetLibrary } from './components/AssetLibrary';
 import { StorageBar } from './components/StorageBar';
+import { PreviewPanel } from './components/PreviewPanel';
+import { ProvenancePanel } from './components/ProvenancePanel';
+import { ModelViewer } from './three/ModelViewer';
+import { captureViewerSnapshot } from './three/snapshotBridge';
 import { useGraphStore } from './stores/graphStore';
 import { useUIStore } from './stores/uiStore';
 import { useExecStore } from './stores/execStore';
@@ -74,7 +78,7 @@ export default function App() {
     if (!st.projectId) { log('No project open.'); return; }
     if (isRunning()) { log('A run is already in progress.'); return; }
     if (st.nodes.length === 0) { log('Nothing to run: the workflow is empty.'); return; }
-    void executeGraph({ projectId: st.projectId, doc: st.getDoc(), timeline: st.timeline }).catch((e) => {
+    void executeGraph({ projectId: st.projectId, doc: st.getDoc(), timeline: st.timeline, captureSnapshot: captureViewerSnapshot }).catch((e) => {
       log(`Run failed to start: ${e instanceof Error ? e.message : String(e)}`);
     });
   }, [log]);
@@ -108,6 +112,8 @@ export default function App() {
                 <AssetLibrary />
               </div>
             </div>
+          ) : workspace === 'INSPECT' ? (
+            <InspectWorkspace />
           ) : (
             <WorkspacePlaceholder />
           )}
@@ -121,12 +127,31 @@ export default function App() {
   );
 }
 
+function InspectWorkspace() {
+  const [tab, setTab] = useState<'preview' | 'model' | 'lineage'>('preview');
+  return (
+    <div className="canvas-wrap" style={{ overflow: 'auto', padding: 12 }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <h2 style={{ margin: '0 0 8px' }}>Inspect</h2>
+        <div className="tabs" style={{ padding: 0, marginBottom: 8 }}>
+          <button className={`tab${tab === 'preview' ? ' active' : ''}`} onClick={() => setTab('preview')}>Node preview</button>
+          <button className={`tab${tab === 'model' ? ' active' : ''}`} onClick={() => setTab('model')}>3D viewer</button>
+          <button className={`tab${tab === 'lineage' ? ' active' : ''}`} onClick={() => setTab('lineage')}>Provenance</button>
+        </div>
+        {tab === 'preview' && <PreviewPanel />}
+        {tab === 'model' && <ModelViewer />}
+        {tab === 'lineage' && <ProvenancePanel />}
+      </div>
+    </div>
+  );
+}
+
 function WorkspacePlaceholder() {
   const ws = useUIStore((s) => s.workspace);
   const setWs = useUIStore((s) => s.setWorkspace);
   const copy: Record<string, string> = {
     ASSETS: '',
-    INSPECT: 'The INSPECT workspace (large preview + provenance) is implemented in Phase 5. Use the Preview tab on the right today.',
+    INSPECT: '',
     EXPORT: 'The EXPORT workspace (artifacts + packaging) is implemented in Phases 2/7. Export nodes land with the media pipeline.',
   };
   return (

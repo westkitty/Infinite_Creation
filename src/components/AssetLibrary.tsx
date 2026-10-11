@@ -224,6 +224,11 @@ function AssetDetails({ asset }: { asset: AssetRecord }) {
           }
         }}>Delete</button>
       </div>
+      <div className="field" style={{ marginTop: 8 }}>
+        <label>Revision note</label>
+        <textarea rows={2} value={asset.note ?? ''} placeholder="Note for this revision…"
+          onChange={(e) => { const note = e.target.value; void updateAsset(asset.id, { note }).then(() => st.upsert({ ...asset, note })); }} />
+      </div>
       <div style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
           {asset.tags.map((t) => (

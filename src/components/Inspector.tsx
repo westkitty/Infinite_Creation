@@ -60,6 +60,7 @@ export function Inspector() {
           onChange={(e) => st.updateNodeData(node.id, { disabled: e.target.checked })} />
         <label htmlFor="node-disabled">Disable node (skip execution)</label>
       </div>
+      <PresetRow nodeType={node.type} nodeId={node.id} />
       {def.params.map((p) => {
         const v = (node.data.params as Record<string, unknown>)[p.key] ?? p.default;
         return (
@@ -124,6 +125,56 @@ function ParamField(props: {
         </select>
       )}
       {props.description && <div className="hint">{props.description}</div>}
+    </div>
+  );
+}
+
+const PRESETS: Record<string, Array<{ name: string; params: Record<string, unknown> }>> = {
+  'image.exposure': [
+    { name: 'Brighten', params: { brightness: 15, exposure: 0.3 } },
+    { name: 'Darken', params: { brightness: -15, exposure: -0.3 } },
+    { name: 'Reset', params: { brightness: 0, exposure: 0 } },
+  ],
+  'image.contrast': [
+    { name: 'Punchy', params: { contrast: 25 } },
+    { name: 'Soft', params: { contrast: -20 } },
+    { name: 'Reset', params: { contrast: 0 } },
+  ],
+  'image.saturation': [
+    { name: 'Vivid', params: { saturation: 35 } },
+    { name: 'Muted', params: { saturation: -35 } },
+    { name: 'B&W', params: { saturation: -100 } },
+    { name: 'Reset', params: { saturation: 0 } },
+  ],
+  'image.colorBalance': [
+    { name: 'Warm', params: { red: 12, green: 4, blue: -10 } },
+    { name: 'Cool', params: { red: -10, green: 0, blue: 14 } },
+    { name: 'Reset', params: { red: 0, green: 0, blue: 0 } },
+  ],
+  'image.blur': [
+    { name: 'Subtle', params: { radius: 2 } },
+    { name: 'Dreamy', params: { radius: 10 } },
+    { name: 'Reset', params: { radius: 0 } },
+  ],
+  'image.sharpen': [
+    { name: 'Crisp', params: { amount: 60 } },
+    { name: 'Reset', params: { amount: 0 } },
+  ],
+};
+
+function PresetRow({ nodeType, nodeId }: { nodeType: string; nodeId: string }) {
+  const presets = PRESETS[nodeType];
+  if (!presets) return null;
+  return (
+    <div className="field">
+      <label>Presets (reversible — parameters only)</label>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {presets.map((pr) => (
+          <button key={pr.name} className="btn" onClick={() => useGraphStore.getState().updateNodeParams(nodeId, pr.params)}>
+            {pr.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
