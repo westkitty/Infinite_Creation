@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const GRAPH_SCHEMA_VERSION = 3 as const;
+export const GRAPH_SCHEMA_VERSION = 4 as const;
 export const APP_VERSION = '0.1.0';
 
 // ---------------------------------------------------------------------------
@@ -137,6 +137,15 @@ export const GraphEdgeSchema = z.object({
 });
 export type GraphEdge = z.infer<typeof GraphEdgeSchema>;
 
+export const ParamLinkSchema = z.object({
+  id: z.string().min(1),
+  sourceNodeId: z.string().min(1),
+  sourceKey: z.string().min(1),
+  targetNodeId: z.string().min(1),
+  targetKey: z.string().min(1),
+});
+export type ParamLink = z.infer<typeof ParamLinkSchema>;
+
 export const ViewportSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -151,6 +160,7 @@ export const GraphDocSchema = z.object({
   schemaVersion: z.number().int(),
   nodes: z.array(GraphNodeSchema),
   edges: z.array(GraphEdgeSchema),
+  links: z.array(ParamLinkSchema).default([]),
   viewport: ViewportSchema.optional(),
 });
 export type GraphDoc = z.infer<typeof GraphDocSchema>;

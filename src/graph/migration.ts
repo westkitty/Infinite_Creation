@@ -1,4 +1,4 @@
-import { GRAPH_SCHEMA_VERSION, type GraphDoc } from '../types/graph';
+import { GRAPH_SCHEMA_VERSION, type GraphDoc, type ParamLink } from '../types/graph';
 
 /** Migrate any older graph document to the current schema. Never deletes user data. */
 export function migrateGraph(doc: unknown): GraphDoc {
@@ -6,6 +6,7 @@ export function migrateGraph(doc: unknown): GraphDoc {
   const version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1;
   const nodes = Array.isArray(raw.nodes) ? (raw.nodes as GraphDoc['nodes']) : [];
   const edges = Array.isArray(raw.edges) ? (raw.edges as GraphDoc['edges']) : [];
+  const links = Array.isArray(raw.links) ? (raw.links as ParamLink[]) : [];
   const viewport = (raw.viewport as GraphDoc['viewport']) ?? { x: 0, y: 0, zoom: 1 };
 
   const normalizedNodes = nodes.map((n) => ({
@@ -31,10 +32,10 @@ export function migrateGraph(doc: unknown): GraphDoc {
     };
   });
 
-  void version; // v1..v3 share node/edge shape; future migrations branch here.
-  return { schemaVersion: GRAPH_SCHEMA_VERSION, nodes: normalizedNodes, edges: normalizedEdges, viewport };
+  void version; // v1..v3 share node/edge shape; v4 adds param links (default []).
+  return { schemaVersion: GRAPH_SCHEMA_VERSION, nodes: normalizedNodes, edges: normalizedEdges, links, viewport };
 }
 
 export function emptyGraph(): GraphDoc {
-  return { schemaVersion: GRAPH_SCHEMA_VERSION, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } };
+  return { schemaVersion: GRAPH_SCHEMA_VERSION, nodes: [], edges: [], links: [], viewport: { x: 0, y: 0, zoom: 1 } };
 }

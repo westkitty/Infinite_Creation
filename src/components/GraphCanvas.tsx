@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow, Background, Controls, MiniMap, Panel,
   useNodesState, useEdgesState, type Node, type Edge, type Connection, type NodeChange, type EdgeChange,
@@ -9,6 +9,7 @@ import { useUIStore } from '../stores/uiStore';
 import { getNodeDef } from '../graph/registry';
 import { explainConnection } from '../graph/validation';
 import { StudioNode } from './StudioNode';
+import { SubgraphsModal } from './SubgraphsModal';
 
 const nodeTypes = { studio: StudioNode };
 
@@ -166,6 +167,7 @@ export function GraphCanvas() {
           <div className="canvas-toolbar" style={{ position: 'static' }}>
             <button className="btn ghost" title="Add node (browse in left panel)" onClick={() => useUIStore.getState().setPaletteOpen(true)}>+ Node</button>
             <button className="btn ghost" title={`Snap to grid: ${snap ? 'on' : 'off'}`} onClick={() => useUIStore.getState().toggleSnap()}>Snap {snap ? 'On' : 'Off'}</button>
+            <SubgraphButton />
           </div>
         </Panel>
       </ReactFlow>
@@ -217,4 +219,17 @@ export function pasteClipboard() {
 
 export function connectionHint(sourceType: string, sourceHandle: string, targetType: string, targetHandle: string): string {
   return explainConnection(sourceType, sourceHandle, targetType, targetHandle);
+}
+
+function SubgraphButton() {
+  const [open, setOpen] = React.useState(false);
+  const count = useGraphStore((s) => s.selectedNodeIds.length);
+  return (
+    <>
+      <button className="btn ghost" title="Save selection as a reusable subgraph / browse library" onClick={() => setOpen(true)}>
+        Subgraphs{count > 0 ? ` (${count})` : ''}
+      </button>
+      <SubgraphsModal open={open} onClose={() => setOpen(false)} />
+    </>
+  );
 }

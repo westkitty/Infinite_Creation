@@ -2,7 +2,7 @@
 // bounded concurrency, deterministic caching, cooperative cancellation, error
 // propagation, retry, and run history. Single-flight: only one run at a time.
 
-import type { GraphDoc, GraphNode, NodeRunRecord, RunRecord, TimelineDoc } from '../types/graph';
+import type { GraphDoc, GraphNode, NodeRunRecord, ParamLink, RunRecord, TimelineDoc } from '../types/graph';
 import { getNodeDef } from '../graph/registry';
 import { topoOrder, validateGraph, downstreamNodeIds } from '../graph/validation';
 import { EXECUTORS, describeValue, type ExecContext, type ExecValue } from './executors';
@@ -12,6 +12,7 @@ import { decodeImageBlob } from '../media/codec';
 import { db } from '../assets/db';
 import { getAssetBlob, storeDerivedAsset } from '../assets/repository';
 import { uid, stableStringify, shortHash } from '../lib/ids';
+import { expandSubgraphNodes } from '../subgraphs/library';
 import { useExecStore, type NodeOutput } from '../stores/execStore';
 
 const MAX_NODE_CONCURRENCY = 3;
@@ -72,11 +73,16 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
   const t0 = Date.now();
 
   exec.setRunning(true, runId);
-  exec.setProgress(0, opts.doc.nodes.length);
-  exec.log(`Run ${runId} started (${opts.doc.nodes.length} nodes)`);
+  // ---- subgraph expansion (inline, same engine) ----
+  const expanded = await expandSubgraphNodes(opts.doc);
+  const doc: GraphDoc = expanded.doc;
+  const expansionErrors = expanded.errors;
+
+  exec.setProgress(0, doc.nodes.length);
+  exec.log(`Run ${runId} started (${doc.nodes.length} nodes${expanded.doc !== opts.doc ? ' — subgraph placeholders expanded' : ''})`);
 
   const nodeRuns: Record<string, NodeRunRecord> = {};
-  const byId = new Map(opts.doc.nodes.map((n) => [n.id, n]));
+  const byId = new Map(doc.nodes.map((n) => [n.id, n]));
   const setStatus = (id: string, s: NodeRunRecord['status']) => {
     exec.setNodeStatus(id, s);
     nodeRuns[id] = { ...(nodeRuns[id] ?? { nodeId: id, status: s }), nodeId: id, status: s };
@@ -97,17 +103,31 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
     return record;
   };
 
+  if (expansionErrors.size > 0) {
+    for (const n of doc.nodes) setStatus(n.id, 'blocked');
+    for (const [id, msg] of expansionErrors) {
+      if (byId.has(id)) {
+        setStatus(id, 'failed');
+        nodeRuns[id].error = msg;
+        exec.setNodeRun(id, nodeRuns[id]);
+        publishOutput(byId.get(id)!, null, runId, false, msg);
+      }
+    }
+    const first = [...expansionErrors.values()][0];
+    return finish('failed', `Subgraph expansion failed: ${first}`);
+  }
+
   // ---- validation ----
-  const issues = validateGraph(opts.doc);
+  const issues = validateGraph(doc);
   const errors = issues.filter((i) => i.severity === 'error');
   // Missing-asset detection uses live store state.
   if (errors.length > 0) {
-    for (const n of opts.doc.nodes) setStatus(n.id, 'blocked');
+    for (const n of doc.nodes) setStatus(n.id, 'blocked');
     return finish('failed', `${errors.length} validation error(s): ${errors[0].message}`);
   }
   let order: string[];
   try {
-    order = topoOrder(opts.doc);
+    order = topoOrder(doc);
   } catch {
     return finish('failed', 'Graph contains a cycle');
   }
@@ -115,7 +135,7 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
   if (opts.onlyNodeIds?.length) {
     const keep = new Set<string>();
     const incoming = new Map<string, string[]>();
-    for (const e of opts.doc.edges) {
+    for (const e of doc.edges) {
       if (!incoming.has(e.target)) incoming.set(e.target, []);
       incoming.get(e.target)!.push(e.source);
     }
@@ -149,8 +169,8 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
   const values = new Map<string, Record<string, ExecValue>>();
   // Preload cache hits' values for nodes outside target? No — only target runs.
 
-  const edgesByTarget = new Map<string, typeof opts.doc.edges>();
-  for (const e of opts.doc.edges) {
+  const edgesByTarget = new Map<string, typeof doc.edges>();
+  for (const e of doc.edges) {
     if (!edgesByTarget.has(e.target)) edgesByTarget.set(e.target, []);
     edgesByTarget.get(e.target)!.push(e);
   }
@@ -196,7 +216,9 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
       return;
     }
 
-    const key = nodeCacheKey({ nodeType: node.type, nodeVersion: def.version, params: node.data.params as Record<string, unknown>, inputHashes });
+    const { params: effectiveParams, applied: appliedLinks } = resolveLinkedParams(doc, node);
+    if (appliedLinks.length) exec.log(`Node ${node.id}: ${appliedLinks.length} linked param(s) applied`);
+    const key = nodeCacheKey({ nodeType: node.type, nodeVersion: def.version, params: effectiveParams, inputHashes });
     const hit = resultCache.get(node.id, key);
     if (hit) {
       values.set(node.id, hit);
@@ -214,7 +236,7 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
     try {
       const executor = EXECUTORS[node.type];
       if (!executor) throw new Error(`No executor for node type "${node.type}"`);
-      const out = await executor(ctx, inputs, (node.data.params as Record<string, unknown>) ?? {});
+      const out = await executor(ctx, inputs, effectiveParams);
       if (signal.aborted || currentRun?.runId !== runId) {
         setStatus(node.id, 'cancelled'); // stale completion — never publish
         return;
@@ -230,7 +252,7 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
       const hashes = Object.values(out).map(hashValue);
       nodeRuns[node.id].outputHash = shortHash(stableStringify(hashes));
       exec.setNodeRun(node.id, nodeRuns[node.id]);
-      await persistOutputs(ctx, node, def.version, out, inputHashes);
+      await persistOutputs(ctx, { ...node, data: { ...node.data, params: effectiveParams } }, def.version, out, inputHashes);
       publishOutput(node, out, runId, false);
     } catch (e) {
       const aborted = signal.aborted || (e instanceof DOMException && e.name === 'AbortError');
@@ -254,7 +276,7 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
   const depth = new Map<string, number>();
   for (const id of order) {
     let d = 0;
-    for (const e of opts.doc.edges) if (e.target === id) d = Math.max(d, (depth.get(e.source) ?? 0) + 1);
+    for (const e of doc.edges) if (e.target === id) d = Math.max(d, (depth.get(e.source) ?? 0) + 1);
     depth.set(id, d);
   }
   const levels = new Map<number, GraphNode[]>();
@@ -358,6 +380,38 @@ async function persistOutputs(
       useExecStore.getState().log(`Artifact persistence failed for ${node.id}/${port}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+}
+
+/** Resolve one-level parameter links: target params are overridden by the
+ *  source node's own raw param values (type-checked). One level keeps the
+ *  semantics predictable and cycle-free. */
+export function resolveLinkedParams(
+  doc: Pick<GraphDoc, 'nodes' | 'links'>,
+  node: GraphNode,
+): { params: Record<string, unknown>; applied: ParamLink[] } {
+  const params: Record<string, unknown> = { ...((node.data.params as Record<string, unknown>) ?? {}) };
+  const applied: ParamLink[] = [];
+  const links = (doc as GraphDoc).links ?? [];
+  const def = getNodeDef(node.type);
+  for (const link of links) {
+    if (link.targetNodeId !== node.id) continue;
+    const targetDef = def?.params.find((p) => p.key === link.targetKey);
+    if (!targetDef || (targetDef.type !== 'number' && targetDef.type !== 'slider' && targetDef.type !== 'color')) continue;
+    const src = doc.nodes.find((n) => n.id === link.sourceNodeId);
+    if (!src) continue;
+    const srcDef = getNodeDef(src.type);
+    const srcParamDef = srcDef?.params.find((p) => p.key === link.sourceKey);
+    if (!srcParamDef) continue;
+    const srcIsNum = srcParamDef.type === 'number' || srcParamDef.type === 'slider';
+    const tgtIsNum = targetDef.type === 'number' || targetDef.type === 'slider';
+    if (srcIsNum !== tgtIsNum) continue; // incompatible kinds never drive each other
+    const raw = (src.data.params as Record<string, unknown>)[link.sourceKey] ?? srcParamDef.default;
+    if (tgtIsNum && typeof raw !== 'number') continue;
+    if (!tgtIsNum && typeof raw !== 'string') continue;
+    params[link.targetKey] = raw;
+    applied.push(link);
+  }
+  return { params, applied };
 }
 
 /** Retry failed/blocked nodes (and only those plus downstream) in a fresh run. */

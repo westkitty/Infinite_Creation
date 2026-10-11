@@ -1,4 +1,9 @@
 import { useState } from 'react';
+import { BatchModal } from './BatchModal';
+import { listProviders } from '../providers/registry';
+import { cacheInspector } from '../engine/scheduler';
+import { resultCache } from '../engine/cache';
+import { formatBytes } from '../lib/ids';
 import { useUIStore } from '../stores/uiStore';
 import { NodeBrowser } from './NodeBrowser';
 import { Inspector } from './Inspector';
@@ -58,6 +63,9 @@ export function BottomPanel() {
   const nodeRuns = useExecStore((s) => s.nodeRuns);
   const diagnostics = useExecStore((s) => s.diagnostics);
   const cacheStats = useExecStore((s) => s.cacheStats);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [heatmap, setHeatmap] = useState(false);
+  const [cacheTick, setCacheTick] = useState(0);
   if (collapsed) return <div className="bottom collapsed"><div className="panel-header"><button className="icon-btn" onClick={toggle}>▲</button> Queue / Timeline / Diagnostics</div></div>;
   return (
     <div className="bottom">
@@ -69,22 +77,35 @@ export function BottomPanel() {
         </div>
         <span className="spacer" />
         {running && <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{progress.done}/{progress.total}</span>}
+        <button className="btn" onClick={() => setBatchOpen(true)} title="Run this workflow against multiple images">Batch…</button>
         <button className="icon-btn" onClick={toggle} aria-label="Collapse bottom panel">▼</button>
       </div>
       <div className="panel-body">
         {tab === 'queue' && (
           <div>
             {running && <div className="progressbar" style={{ marginBottom: 8 }}><div style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} /></div>}
+            <div style={{ marginBottom: 6 }}>
+              <label style={{ fontSize: 11 }}><input type="checkbox" checked={heatmap} onChange={(e) => setHeatmap(e.target.checked)} /> execution heatmap (sort by measured duration)</label>
+            </div>
             <table className="kv"><thead><tr><th>Node</th><th>Status</th><th>Duration</th><th>Cache</th><th>Detail</th></tr></thead>
               <tbody>
                 {Object.values(nodeRuns).length === 0 && <tr><td colSpan={5} style={{ color: 'var(--text-2)' }}>No runs yet. Press Run to execute the workflow.</td></tr>}
-                {Object.values(nodeRuns).map((r) => (
-                  <tr key={r.nodeId}><td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.nodeId}</td>
-                    <td><span className="badge">{r.status}</span></td>
-                    <td>{r.durationMs !== undefined ? `${r.durationMs.toFixed(1)} ms` : '—'}</td>
-                    <td>{r.cacheHit ? 'hit' : 'miss'}</td>
-                    <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.error ?? r.outputHash ?? '—'}</td></tr>
-                ))}
+                {(heatmap
+                  ? [...Object.values(nodeRuns)].sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1))
+                  : Object.values(nodeRuns)
+                ).map((r) => {
+                  const max = Math.max(1, ...Object.values(nodeRuns).map((x) => x.durationMs ?? 0));
+                  const intensity = heatmap && r.durationMs !== undefined ? Math.min(0.5, (r.durationMs / max) * 0.5) : 0;
+                  return (
+                    <tr key={r.nodeId} style={intensity ? { background: `rgba(200,16,46,${intensity})` } : undefined}>
+                      <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.nodeId}</td>
+                      <td><span className="badge">{r.status}</span></td>
+                      <td>{r.durationMs !== undefined ? `${r.durationMs.toFixed(1)} ms` : '—'}</td>
+                      <td>{r.cacheHit ? 'hit' : 'miss'}</td>
+                      <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.error ?? r.outputHash ?? '—'}</td>
+                    </tr>
+                  );
+                })}
               </tbody></table>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
               <button className="btn" disabled={running || !Object.values(nodeRuns).some((r) => r.status === 'failed' || r.status === 'blocked')}
@@ -98,11 +119,49 @@ export function BottomPanel() {
         )}
         {tab === 'timeline' && <TimelineEditor />}
         {tab === 'diagnostics' && (
-          <div>
-            <div style={{ marginBottom: 6 }}><button className="btn" onClick={() => useExecStore.getState().clearLogs()}>Clear</button></div>
-            <div className="log">{diagnostics.length === 0 ? 'No diagnostics yet.' : diagnostics.map((d, i) => <div key={i} className="logline">{d}</div>)}</div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: 6 }}><button className="btn" onClick={() => useExecStore.getState().clearLogs()}>Clear</button></div>
+              <div className="log">{diagnostics.length === 0 ? 'No diagnostics yet.' : diagnostics.map((d, i) => <div key={i} className="logline">{d}</div>)}</div>
+            </div>
+            <div style={{ width: 340, flex: 'none' }}>
+              <h4 style={{ margin: '0 0 4px', fontSize: 12 }}>Provider adapters</h4>
+              {listProviders().map((pr) => (
+                <div key={pr.providerId} style={{ fontSize: 11, marginBottom: 4 }}>
+                  <span className="badge">{pr.state}</span> <strong>{pr.providerId}</strong>
+                  <span style={{ color: 'var(--text-2)' }}> · {pr.note}</span>
+                </div>
+              ))}
+              <p style={{ fontSize: 11, color: 'var(--text-2)' }}>Offline image processing never depends on providers. Custom adapters register via <span style={{ fontFamily: 'var(--mono)' }}>registerProvider()</span>.</p>
+              <h4 style={{ margin: '8px 0 4px', fontSize: 12 }}>Cache inspector</h4>
+              <CacheInspector tick={cacheTick} onRefresh={() => setCacheTick((t) => t + 1)} />
+            </div>
           </div>
         )}
+        <BatchModal open={batchOpen} onClose={() => setBatchOpen(false)} />
+      </div>
+    </div>
+  );
+}
+
+function CacheInspector({ tick, onRefresh }: { tick: number; onRefresh: () => void }) {
+  void tick;
+  const entries = cacheInspector();
+  const stats = resultCache.stats();
+  return (
+    <div style={{ fontSize: 11 }}>
+      <div style={{ marginBottom: 4, color: 'var(--text-1)' }}>
+        {stats.entries} entries · {formatBytes(stats.bytes)} · {stats.evictions} evictions{' '}
+        <button className="btn" onClick={onRefresh}>Refresh</button>{' '}
+        <button className="btn" onClick={() => { resultCache.invalidateAll(); onRefresh(); }}>Clear</button>
+      </div>
+      <div style={{ maxHeight: 150, overflow: 'auto' }}>
+        {entries.length === 0 && <span style={{ color: 'var(--text-2)' }}>Cache empty.</span>}
+        {entries.map((e) => (
+          <div key={e.nodeId} style={{ fontFamily: 'var(--mono)', fontSize: 10, marginBottom: 2 }}>
+            {e.nodeId.slice(0, 14)} · key {e.key} · {formatBytes(e.bytes)} · age {(e.ageMs / 1000).toFixed(0)}s
+          </div>
+        ))}
       </div>
     </div>
   );

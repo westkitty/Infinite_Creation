@@ -353,9 +353,11 @@ const DEFS: NodeDefInput[] = [
   },
   {
     type: 'util.subgraph', label: 'Reusable Subgraph', family: 'SUBGRAPH',
-    description: 'Execute a saved subgraph definition inline.',
-    version: 1, inputs: [], outputs: [],
-    params: [str('subgraphId', 'Subgraph ID', '', 'string', 'ID of a saved subgraph')],
+    description: 'Execute a saved single-input/single-output subgraph definition inline (expanded by the scheduler into ordinary nodes).',
+    version: 1,
+    inputs: [P('image', 'ImageAsset', 'Image')],
+    outputs: [P('image', 'ImageAsset', 'Output')],
+    params: [str('subgraphId', 'Subgraph ID', '', 'string', 'ID of a saved subgraph (see Subgraphs library)')],
   },
   {
     type: 'util.inspector', label: 'Output Inspector', family: 'UTILITY',

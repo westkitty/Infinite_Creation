@@ -243,7 +243,7 @@ const utilBranch: Executor = async (_c, i) => {
 const utilMerge: Executor = async (_c, i) => ({ collection: { kind: 'collection', items: [...(i['images'] ?? [])] } });
 const utilInspector: Executor = async (_c, i) => ({ image: single(i, 'input') });
 const utilSubgraph: Executor = async () => {
-  throw new Error('Reusable subgraphs execute in Phase 6 — this node is not runnable yet');
+  throw new Error('Subgraph placeholder reached the executor unexpanded (stale run?) — the scheduler expands valid single-input/single-output definitions before execution');
 };
 
 // --------------------------------------------------------------- timeline ---

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GraphDoc, GraphEdge, GraphNode, TimelineDoc, Viewport } from '../types/graph';
+import { GRAPH_SCHEMA_VERSION, type GraphDoc, type GraphEdge, type GraphNode, type ParamLink, type TimelineDoc, type Viewport } from '../types/graph';
 import { emptyGraph } from '../graph/migration';
 import { defaultParams, getNodeDef } from '../graph/registry';
 import { canConnect, downstreamNodeIds } from '../graph/validation';
@@ -10,7 +10,7 @@ import { resultCache } from '../engine/cache';
 /** Mark a node and all downstream nodes stale (params/structure changed). */
 function touch(doc: { nodes: GraphNode[]; edges: GraphEdge[] }, nodeId: string): void {
   try {
-    const affected = [nodeId, ...downstreamNodeIds({ schemaVersion: 3, nodes: doc.nodes, edges: doc.edges }, nodeId)];
+    const affected = [nodeId, ...downstreamNodeIds({ nodes: doc.nodes, edges: doc.edges }, nodeId)];
     for (const id of affected) resultCache.invalidate(id);
     useExecStore.getState().markStaleDownstream(affected);
   } catch {
@@ -21,6 +21,7 @@ function touch(doc: { nodes: GraphNode[]; edges: GraphEdge[] }, nodeId: string):
 export interface GraphSnapshot {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  links: ParamLink[];
 }
 
 function clone<T>(v: T): T {
@@ -32,6 +33,7 @@ interface GraphState {
   projectName: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  links: ParamLink[];
   viewport: Viewport;
   selectedNodeIds: string[];
   timeline: TimelineDoc;
@@ -52,6 +54,8 @@ interface GraphState {
   removeEdges: (ids: string[]) => void;
   setSelected: (ids: string[]) => void;
   setTimeline: (t: TimelineDoc) => void;
+  addLink: (sourceNodeId: string, sourceKey: string, targetNodeId: string, targetKey: string) => string | null;
+  removeLink: (id: string) => void;
   undo: () => void;
   redo: () => void;
   clearHistory: () => void;
@@ -62,7 +66,7 @@ interface GraphState {
 const HISTORY_LIMIT = 100;
 
 function pushHistory(s: GraphState): Partial<GraphState> {
-  const past = [...s.past, { nodes: clone(s.nodes), edges: clone(s.edges) }];
+  const past = [...s.past, { nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links) }];
   if (past.length > HISTORY_LIMIT) past.shift();
   return { past, future: [] };
 }
@@ -72,6 +76,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   projectName: 'Untitled',
   nodes: [],
   edges: [],
+  links: [],
   viewport: { x: 0, y: 0, zoom: 1 },
   selectedNodeIds: [],
   timeline: { schemaVersion: 1, fps: 30, duration: 4, timebase: '30fps', tracks: [], playhead: 0 },
@@ -83,7 +88,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   loadProject: (projectId, name, graph, timeline) =>
     set({
       projectId, projectName: name,
-      nodes: clone(graph.nodes), edges: clone(graph.edges),
+      nodes: clone(graph.nodes), edges: clone(graph.edges), links: clone(graph.links ?? []),
       viewport: graph.viewport ?? { x: 0, y: 0, zoom: 1 },
       timeline: clone(timeline),
       selectedNodeIds: [], dirty: false, past: [], future: [], lastConnectError: null,
@@ -141,6 +146,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       ...pushHistory(s),
       nodes: s.nodes.filter((n) => !setIds.has(n.id)),
       edges: s.edges.filter((e) => !setIds.has(e.source) && !setIds.has(e.target)),
+      links: s.links.filter((l) => !setIds.has(l.sourceNodeId) && !setIds.has(l.targetNodeId)),
       selectedNodeIds: s.selectedNodeIds.filter((id) => !setIds.has(id)),
       dirty: true,
     }));
@@ -165,7 +171,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const src = s.nodes.find((n) => n.id === source);
     const tgt = s.nodes.find((n) => n.id === target);
     if (!src || !tgt) return null;
-    const check = canConnect({ schemaVersion: 3, nodes: s.nodes, edges: s.edges }, src, sourceHandle, tgt, targetHandle);
+    const check = canConnect({ nodes: s.nodes, edges: s.edges }, src, sourceHandle, tgt, targetHandle);
     if (!check.ok) {
       set({ lastConnectError: check.reason ?? 'Rejected' });
       return null;
@@ -193,23 +199,44 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set((s) => {
       if (s.past.length === 0) return {};
       const prev = s.past[s.past.length - 1];
-      const future = [...s.future, { nodes: clone(s.nodes), edges: clone(s.edges) }];
-      return { nodes: clone(prev.nodes), edges: clone(prev.edges), past: s.past.slice(0, -1), future, dirty: true };
+      const future = [...s.future, { nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links) }];
+      return { nodes: clone(prev.nodes), edges: clone(prev.edges), links: clone(prev.links ?? []), past: s.past.slice(0, -1), future, dirty: true };
     }),
 
   redo: () =>
     set((s) => {
       if (s.future.length === 0) return {};
       const next = s.future[s.future.length - 1];
-      const past = [...s.past, { nodes: clone(s.nodes), edges: clone(s.edges) }];
+      const past = [...s.past, { nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links) }];
       return { nodes: clone(next.nodes), edges: clone(next.edges), future: s.future.slice(0, -1), past, dirty: true };
     }),
 
   clearHistory: () => set({ past: [], future: [] }),
   markClean: () => set({ dirty: false }),
+  addLink: (sourceNodeId, sourceKey, targetNodeId, targetKey) => {
+    const s = get();
+    if (sourceNodeId === targetNodeId && sourceKey === targetKey) return null;
+    const dupe = s.links.find((l) => l.sourceNodeId === sourceNodeId && l.sourceKey === sourceKey && l.targetNodeId === targetNodeId && l.targetKey === targetKey);
+    if (dupe) return dupe.id;
+    // One driver per target param.
+    const conflict = s.links.find((l) => l.targetNodeId === targetNodeId && l.targetKey === targetKey);
+    if (conflict) return null;
+    const link: ParamLink = { id: uid('lk'), sourceNodeId, sourceKey, targetNodeId, targetKey };
+    set((st) => ({ ...pushHistory(st), links: [...st.links, link], dirty: true }));
+    touch({ nodes: s.nodes, edges: s.edges }, targetNodeId);
+    return link.id;
+  },
+
+  removeLink: (id) =>
+    set((s) => {
+      const link = s.links.find((l) => l.id === id);
+      if (link) touch(s, link.targetNodeId);
+      return { ...pushHistory(s), links: s.links.filter((l) => l.id !== id), dirty: true };
+    }),
+
   getDoc: () => {
     const s = get();
     void emptyGraph;
-    return { schemaVersion: 3, nodes: clone(s.nodes), edges: clone(s.edges), viewport: { ...s.viewport } };
+    return { schemaVersion: GRAPH_SCHEMA_VERSION, nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links), viewport: { ...s.viewport } };
   },
 }));

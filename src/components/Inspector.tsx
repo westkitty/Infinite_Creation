@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useGraphStore } from '../stores/graphStore';
 import { useAssetStore } from '../stores/assetStore';
 import { getNodeDef } from '../graph/registry';
-import { validateGraph } from '../graph/validation';
+import { downstreamNodeIds, upstreamNodeIds, validateGraph } from '../graph/validation';
 
 export function Inspector() {
   const selected = useGraphStore((s) => s.selectedNodeIds);
@@ -13,11 +13,11 @@ export function Inspector() {
 
   const issues = useMemo(() => {
     if (!node) return [];
-    return validateGraph({ schemaVersion: 3, nodes, edges }).filter((i) => i.nodeId === node.id);
+    return validateGraph({ nodes, edges }).filter((i) => i.nodeId === node.id);
   }, [node, nodes, edges]);
 
   if (!node) {
-    const all = validateGraph({ schemaVersion: 3, nodes, edges });
+    const all = validateGraph({ nodes, edges });
     const errors = all.filter((i) => i.severity === 'error');
     return (
       <div>
@@ -78,6 +78,78 @@ export function Inspector() {
         <button className="btn" onClick={() => st.duplicateNodes([node.id])}>Duplicate</button>
         <button className="btn danger" onClick={() => st.removeNodes([node.id])}>Delete</button>
       </div>
+      <LinkSection nodeId={node.id} />
+      <DependencySection nodeId={node.id} />
+    </div>
+  );
+}
+
+function LinkSection({ nodeId }: { nodeId: string }) {
+  const nodes = useGraphStore((s) => s.nodes);
+  const links = useGraphStore((s) => s.links);
+  const node = nodes.find((n) => n.id === nodeId);
+  const def = node ? getNodeDef(node.type) : undefined;
+  const [srcNode, setSrcNode] = React.useState('');
+  const [srcKey, setSrcKey] = React.useState('');
+  const [tgtKey, setTgtKey] = React.useState('');
+  if (!node || !def) return null;
+  const linkable = def.params.filter((p) => p.type === 'number' || p.type === 'slider' || p.type === 'color');
+  if (linkable.length === 0) return null;
+  const incoming = links.filter((l) => l.targetNodeId === nodeId);
+  const st = useGraphStore.getState();
+  const srcDef = srcNode ? getNodeDef(nodes.find((n) => n.id === srcNode)?.type ?? '') : undefined;
+  const srcKeys = srcDef?.params.filter((p) => p.type === 'number' || p.type === 'slider' || p.type === 'color') ?? [];
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+      <h4 style={{ margin: '0 0 6px', fontSize: 12 }}>Parameter links</h4>
+      <p style={{ fontSize: 11, color: 'var(--text-2)' }}>One driver per target param; numeric↔numeric, color↔color; one level (cycle-free).</p>
+      {incoming.map((l) => (
+        <div key={l.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, marginBottom: 4 }}>
+          <span className="badge" title={l.sourceNodeId}>{l.sourceKey}</span>→<span className="badge">{l.targetKey}</span>
+          <button className="icon-btn" title="Remove link" onClick={() => st.removeLink(l.id)}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+        <select value={srcNode} onChange={(e) => { setSrcNode(e.target.value); setSrcKey(''); }} aria-label="Driver node" style={linkSel}>
+          <option value="">driver node…</option>
+          {nodes.filter((n) => n.id !== nodeId).map((n) => <option key={n.id} value={n.id}>{n.data.label || n.type} ({n.id.slice(0, 8)})</option>)}
+        </select>
+        <select value={srcKey} onChange={(e) => setSrcKey(e.target.value)} aria-label="Driver param" style={linkSel}>
+          <option value="">param…</option>
+          {srcKeys.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+        <select value={tgtKey} onChange={(e) => setTgtKey(e.target.value)} aria-label="Target param" style={linkSel}>
+          <option value="">drives…</option>
+          {linkable.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+        <button className="btn" disabled={!srcNode || !srcKey || !tgtKey}
+          onClick={() => { const id = st.addLink(srcNode, srcKey, nodeId, tgtKey); if (id) { setSrcKey(''); setTgtKey(''); } }}>
+          Link</button>
+      </div>
+    </div>
+  );
+}
+
+const linkSel: React.CSSProperties = { background: 'var(--bg-0)', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 6px', fontSize: 11, maxWidth: 150 };
+
+function DependencySection({ nodeId }: { nodeId: string }) {
+  const nodes = useGraphStore((s) => s.nodes);
+  const edges = useGraphStore((s) => s.edges);
+  const up = upstreamNodeIds({ nodes, edges }, nodeId);
+  const down = downstreamNodeIds({ nodes, edges }, nodeId);
+  const label = (id: string) => {
+    const n = nodes.find((x) => x.id === id);
+    return n ? `${n.data.label || n.type}` : id;
+  };
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+      <h4 style={{ margin: '0 0 6px', fontSize: 12 }}>Dependencies</h4>
+      <p style={{ fontSize: 12, margin: '0 0 4px' }}><strong>Upstream ({up.length}):</strong> {up.length ? up.map((id) => (
+        <button key={id} className="badge" style={{ cursor: 'pointer', background: 'transparent', marginRight: 4 }} onClick={() => useGraphStore.getState().setSelected([id])}>{label(id)}</button>
+      )) : 'none'}</p>
+      <p style={{ fontSize: 12, margin: 0 }}><strong>Downstream ({down.length}):</strong> {down.length ? down.map((id) => (
+        <button key={id} className="badge" style={{ cursor: 'pointer', background: 'transparent', marginRight: 4 }} onClick={() => useGraphStore.getState().setSelected([id])}>{label(id)}</button>
+      )) : 'none'}</p>
     </div>
   );
 }

@@ -16,7 +16,7 @@ export interface ConnectionCheck {
 }
 
 export function canConnect(
-  doc: GraphDoc,
+  doc: Pick<GraphDoc, 'nodes' | 'edges'>,
   sourceNode: GraphNode,
   sourceHandle: string,
   targetNode: GraphNode,
@@ -64,7 +64,7 @@ export function canConnect(
 }
 
 /** Detect cycles; returns one cycle path if present. */
-export function findCycle(doc: GraphDoc): string[] | null {
+export function findCycle(doc: Pick<GraphDoc, 'nodes' | 'edges'>): string[] | null {
   const adj = new Map<string, string[]>();
   for (const n of doc.nodes) adj.set(n.id, []);
   for (const e of doc.edges) adj.get(e.source)?.push(e.target);
@@ -98,7 +98,7 @@ export function findCycle(doc: GraphDoc): string[] | null {
 }
 
 /** Kahn's topological order of node ids. Throws if a cycle exists. */
-export function topoOrder(doc: GraphDoc): string[] {
+export function topoOrder(doc: Pick<GraphDoc, 'nodes' | 'edges'>): string[] {
   const indeg = new Map<string, number>();
   const adj = new Map<string, string[]>();
   for (const n of doc.nodes) {
@@ -128,7 +128,7 @@ export function topoOrder(doc: GraphDoc): string[] {
   return out;
 }
 
-export function validateGraph(doc: GraphDoc, assetExists?: (id: string) => boolean): ValidationIssue[] {
+export function validateGraph(doc: Pick<GraphDoc, 'nodes' | 'edges'>, assetExists?: (id: string) => boolean): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const nodeIds = new Set(doc.nodes.map((n) => n.id));
 
@@ -195,7 +195,7 @@ export function validateGraph(doc: GraphDoc, assetExists?: (id: string) => boole
   return issues;
 }
 
-export function upstreamNodeIds(doc: GraphDoc, nodeId: string): string[] {
+export function upstreamNodeIds(doc: Pick<GraphDoc, 'nodes' | 'edges'>, nodeId: string): string[] {
   const incoming = new Map<string, string[]>();
   for (const e of doc.edges) {
     if (!incoming.has(e.target)) incoming.set(e.target, []);
@@ -214,7 +214,7 @@ export function upstreamNodeIds(doc: GraphDoc, nodeId: string): string[] {
   return out;
 }
 
-export function downstreamNodeIds(doc: GraphDoc, nodeId: string): string[] {
+export function downstreamNodeIds(doc: Pick<GraphDoc, 'nodes' | 'edges'>, nodeId: string): string[] {
   const outgoing = new Map<string, string[]>();
   for (const e of doc.edges) {
     if (!outgoing.has(e.source)) outgoing.set(e.source, []);
