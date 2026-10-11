@@ -10,6 +10,8 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { ProvenancePanel } from './components/ProvenancePanel';
 import { ModelViewer } from './three/ModelViewer';
 import { captureViewerSnapshot } from './three/snapshotBridge';
+import { ExportWorkspace } from './components/ExportWorkspace';
+import { downloadText, exportWorkflowJSON, importWorkflowJSON, pickFile } from './export/workflowJson';
 import { useGraphStore } from './stores/graphStore';
 import { useUIStore } from './stores/uiStore';
 import { useExecStore } from './stores/execStore';
@@ -26,6 +28,16 @@ export default function App() {
   const dirty = useGraphStore((s) => s.dirty);
   const workspace = useUIStore((s) => s.workspace);
   const saveTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (id) void openProject(id);
+    };
+    window.addEventListener('ics-open-project', handler);
+    return () => window.removeEventListener('ics-open-project', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Boot: open most recent project or create one.
   useEffect(() => {
@@ -87,8 +99,26 @@ export default function App() {
     cancelRun();
     log('Cancellation requested…');
   }, [log]);
-  const handleExportJSON = useCallback(() => { log('Workflow JSON export arrives in Phase 7.'); }, [log]);
-  const handleImportJSON = useCallback(() => { log('Workflow JSON import arrives in Phase 7.'); }, [log]);
+  const handleExportJSON = useCallback(() => {
+    const st = useGraphStore.getState();
+    downloadText(`${st.projectName.replace(/[^\w\- ]+/g, '_')}.workflow.json`, exportWorkflowJSON(st.projectName, st.getDoc(), st.timeline));
+    log('Workflow JSON exported.');
+  }, [log]);
+  const handleImportJSON = useCallback(() => {
+    void (async () => {
+      const f = await pickFile('application/json,.json');
+      if (!f) return;
+      try {
+        const { graph, timeline, warnings } = importWorkflowJSON(await f.text());
+        const st = useGraphStore.getState();
+        st.loadProject(st.projectId ?? 'p_import', st.projectName, graph, timeline ?? defaultTimeline());
+        for (const w of warnings) log(`Import warning: ${w}`);
+        log(`Workflow imported from ${f.name}.`);
+      } catch (e) {
+        log(`Workflow import failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+  }, [log]);
   const handleSample = useCallback((_id: string) => { log('Sample projects arrive in Phase 8 (after the pipeline works).'); }, [log]);
 
   return (
@@ -114,6 +144,10 @@ export default function App() {
             </div>
           ) : workspace === 'INSPECT' ? (
             <InspectWorkspace />
+          ) : workspace === 'EXPORT' ? (
+            <div className="canvas-wrap" style={{ overflow: 'auto', padding: 12 }}>
+              <ExportWorkspace />
+            </div>
           ) : (
             <WorkspacePlaceholder />
           )}
@@ -152,7 +186,7 @@ function WorkspacePlaceholder() {
   const copy: Record<string, string> = {
     ASSETS: '',
     INSPECT: '',
-    EXPORT: 'The EXPORT workspace (artifacts + packaging) is implemented in Phases 2/7. Export nodes land with the media pipeline.',
+    EXPORT: '',
   };
   return (
     <div className="canvas-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
