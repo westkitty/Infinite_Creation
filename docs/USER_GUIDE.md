@@ -50,7 +50,13 @@ copy/paste, `Ctrl Z / Ctrl Shift Z` undo/redo, `Ctrl K` command palette.
 - **Stale** badges mean parameters changed since the result — re-run.
   Stale media is never presented as current.
 - **Heatmap**: queue tab checkbox sorts nodes by measured duration.
+- **Run history**: the queue tab *History* selector re-opens any of the
+  last 20 runs for this project as a frozen record (per-node status,
+  durations, cache hits, errors). Starting a new run returns to Live.
 - **Cache inspector** (Diagnostics tab): live entries, sizes, evictions.
+- **Lineage** (INSPECT ▸ Provenance, with an asset selected): a clickable
+  graph of ancestor generations and derived children, with approval
+  coloring and honest counts of depth-capped or deleted ancestors.
 
 ## 5. Timeline (ANIMATE)
 

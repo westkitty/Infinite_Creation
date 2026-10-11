@@ -194,6 +194,7 @@ export interface NodeRunRecord {
 
 export interface RunRecord {
   runId: string;
+  projectId: string;
   startedAt: number;
   finishedAt?: number;
   status: 'running' | 'completed' | 'failed' | 'cancelled';

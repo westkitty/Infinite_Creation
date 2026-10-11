@@ -90,12 +90,12 @@ export async function executeGraph(opts: RunOptions): Promise<RunRecord> {
   };
 
   const finish = async (status: RunRecord['status'], error?: string): Promise<RunRecord> => {
-    const record: RunRecord = { runId, startedAt: t0, finishedAt: Date.now(), status, nodeRuns, error };
+    const record: RunRecord = { runId, projectId: opts.projectId, startedAt: t0, finishedAt: Date.now(), status, nodeRuns, error };
     exec.addRun(record);
     exec.setRunning(false, null);
     if (currentRun?.runId === runId) currentRun = null;
     try {
-      await db.runs.put({ ...record, id: runId, projectId: opts.projectId });
+      await db.runs.put({ ...record, id: runId });
       const old = await db.runs.where('projectId').equals(opts.projectId).sortBy('startedAt');
       if (old.length > 20) await db.runs.bulkDelete(old.slice(0, old.length - 20).map((r) => r.id));
     } catch { /* history is best-effort */ }

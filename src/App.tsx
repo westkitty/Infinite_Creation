@@ -20,6 +20,7 @@ import { useUIStore } from './stores/uiStore';
 import { useExecStore } from './stores/execStore';
 import { createProject, listProjects, loadProject, saveProject } from './persistence/projectService';
 import { cancelRun, executeGraph, isRunning } from './engine/scheduler';
+import { loadRunHistory } from './engine/history';
 import { defaultTimeline } from './persistence/projectService';
 import { emptyGraph } from './graph/migration';
 
@@ -62,6 +63,7 @@ export default function App() {
     if (!loaded) return;
     revokeAllUrls();
     useGraphStore.getState().loadProject(loaded.meta.id, loaded.meta.name, loaded.graph ?? emptyGraph(), loaded.timeline ?? defaultTimeline());
+    loadRunHistory(id).then((h) => useExecStore.getState().setHistory(h)).catch(() => {});
     setSaveStatus('saved');
     setProjectsOpen(false);
   }, [setSaveStatus]);

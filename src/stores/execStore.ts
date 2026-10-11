@@ -23,6 +23,7 @@ interface ExecState {
   nodeRuns: Record<string, NodeRunRecord>;
   outputs: Record<string, NodeOutput>;
   runs: RunRecord[];
+  history: RunRecord[];
   diagnostics: string[];
   cacheStats: { hits: number; misses: number; evictions: number };
   setRunning: (running: boolean, runId?: string | null) => void;
@@ -32,6 +33,7 @@ interface ExecState {
   setOutput: (nodeId: string, out: NodeOutput) => void;
   markStaleDownstream: (nodeIds: string[]) => void;
   addRun: (run: RunRecord) => void;
+  setHistory: (runs: RunRecord[]) => void;
   log: (msg: string) => void;
   clearLogs: () => void;
   bumpCache: (kind: 'hits' | 'misses' | 'evictions') => void;
@@ -47,6 +49,7 @@ export const useExecStore = create<ExecState>((set) => ({
   nodeRuns: {},
   outputs: {},
   runs: [],
+  history: [],
   diagnostics: [],
   cacheStats: { hits: 0, misses: 0, evictions: 0 },
   setRunning: (running, runId = null) => set({ running, runId }),
@@ -65,6 +68,7 @@ export const useExecStore = create<ExecState>((set) => ({
       return { outputs, nodeStatus };
     }),
   addRun: (run) => set((s) => ({ runs: [run, ...s.runs].slice(0, 20) })),
+  setHistory: (history) => set({ history }),
   log: (msg) => set((s) => ({ diagnostics: [...s.diagnostics.slice(-499), `[${new Date().toISOString()}] ${msg}`] })),
   clearLogs: () => set({ diagnostics: [] }),
   bumpCache: (kind) => set((s) => ({ cacheStats: { ...s.cacheStats, [kind]: s.cacheStats[kind] + 1 } })),

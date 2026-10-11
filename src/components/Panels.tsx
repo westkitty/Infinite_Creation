@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BatchModal } from './BatchModal';
 import { listProviders } from '../providers/registry';
 import { cacheInspector } from '../engine/scheduler';
@@ -13,6 +13,7 @@ import { AssetLibrary } from './AssetLibrary';
 import { TimelineEditor } from './TimelineEditor';
 import { PreviewPanel } from './PreviewPanel';
 import { retryFailedNodes } from '../engine/scheduler';
+import { mergeHistories } from '../engine/history';
 
 export function LeftPanel() {
   const collapsed = useUIStore((s) => s.leftCollapsed);
@@ -63,6 +64,18 @@ export function BottomPanel() {
   const progress = useExecStore((s) => s.progress);
   const running = useExecStore((s) => s.running);
   const nodeRuns = useExecStore((s) => s.nodeRuns);
+  const sessionRuns = useExecStore((s) => s.runs);
+  const persistedRuns = useExecStore((s) => s.history);
+  const projectId = useGraphStore((s) => s.projectId);
+  const [selRunId, setSelRunId] = useState<string | null>(null);
+  const mergedRuns = useMemo(
+    () => (projectId ? mergeHistories(sessionRuns, persistedRuns, projectId) : []),
+    [sessionRuns, persistedRuns, projectId],
+  );
+  useEffect(() => { if (running) setSelRunId(null); }, [running]);
+  useEffect(() => { setSelRunId(null); }, [projectId]);
+  const viewing = selRunId ? (mergedRuns.find((r) => r.runId === selRunId) ?? null) : null;
+  const queueRows = viewing ? viewing.nodeRuns : nodeRuns;
   const diagnostics = useExecStore((s) => s.diagnostics);
   const cacheStats = useExecStore((s) => s.cacheStats);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -86,17 +99,36 @@ export function BottomPanel() {
         {tab === 'queue' && (
           <div>
             {running && <div className="progressbar" style={{ marginBottom: 8 }}><div style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} /></div>}
-            <div style={{ marginBottom: 6 }}>
+            <div style={{ marginBottom: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
               <label style={{ fontSize: 11 }}><input type="checkbox" checked={heatmap} onChange={(e) => setHeatmap(e.target.checked)} /> execution heatmap (sort by measured duration)</label>
+              <span style={{ flex: 1 }} />
+              <label style={{ fontSize: 11, color: 'var(--text-2)' }}>History{' '}
+                <select value={selRunId ?? ''} onChange={(e) => setSelRunId(e.target.value || null)}
+                  aria-label="Inspect a past run" disabled={running || mergedRuns.length === 0}
+                  style={{ background: 'var(--bg-0)', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 6px', fontSize: 11, maxWidth: 320 }}>
+                  <option value="">Live — current state</option>
+                  {mergedRuns.map((r) => (
+                    <option key={r.runId} value={r.runId}>
+                      {new Date(r.startedAt).toLocaleString()} · {r.status} · {Object.keys(r.nodeRuns).length} nodes{r.finishedAt ? ` · ${r.finishedAt - r.startedAt} ms` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
+            {viewing && (
+              <div className="history-banner" role="status">
+                <span>Frozen record of run <span style={{ fontFamily: 'var(--mono)' }}>{viewing.runId.slice(0, 14)}</span> — {viewing.status}. The graph may have changed since.</span>
+                <button className="btn ghost" onClick={() => setSelRunId(null)}>Back to live</button>
+              </div>
+            )}
             <table className="kv"><thead><tr><th>Node</th><th>Status</th><th>Duration</th><th>Cache</th><th>Detail</th></tr></thead>
               <tbody>
-                {Object.values(nodeRuns).length === 0 && <tr><td colSpan={5} style={{ color: 'var(--text-2)' }}>No runs yet. Press Run to execute the workflow.</td></tr>}
+                {Object.values(queueRows).length === 0 && <tr><td colSpan={5} style={{ color: 'var(--text-2)' }}>{viewing ? 'This run recorded no node details.' : 'No runs yet. Press Run to execute the workflow.'}</td></tr>}
                 {(heatmap
-                  ? [...Object.values(nodeRuns)].sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1))
-                  : Object.values(nodeRuns)
+                  ? [...Object.values(queueRows)].sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1))
+                  : Object.values(queueRows)
                 ).map((r) => {
-                  const max = Math.max(1, ...Object.values(nodeRuns).map((x) => x.durationMs ?? 0));
+                  const max = Math.max(1, ...Object.values(queueRows).map((x) => x.durationMs ?? 0));
                   const intensity = heatmap && r.durationMs !== undefined ? Math.min(0.5, (r.durationMs / max) * 0.5) : 0;
                   return (
                     <tr key={r.nodeId} style={intensity ? { background: `rgba(200,16,46,${intensity})` } : undefined}>
@@ -111,7 +143,7 @@ export function BottomPanel() {
                 })}
               </tbody></table>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-              <button className="btn" disabled={running || !Object.values(nodeRuns).some((r) => r.status === 'failed' || r.status === 'blocked')}
+              <button className="btn" disabled={running || viewing !== null || !Object.values(queueRows).some((r) => r.status === 'failed' || r.status === 'blocked')}
                 onClick={() => {
                   const st = useGraphStore.getState();
                   if (st.projectId) void retryFailedNodes({ projectId: st.projectId, doc: st.getDoc(), timeline: st.timeline });

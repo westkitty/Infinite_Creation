@@ -5,6 +5,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore } from '../stores/graphStore';
+import { useExecStore } from '../stores/execStore';
 import { useUIStore } from '../stores/uiStore';
 import { getNodeDef } from '../graph/registry';
 import { explainConnection } from '../graph/validation';
@@ -47,9 +48,10 @@ function GraphCanvasInner() {
       })),
     [nodes],
   );
+  const running = useExecStore((s) => s.running);
   const rfEdges: Edge[] = useMemo(
-    () => edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle })),
-    [edges],
+    () => edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, animated: running })),
+    [edges, running],
   );
 
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(rfNodes);

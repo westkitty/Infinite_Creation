@@ -31,7 +31,6 @@ export interface ThumbRow {
 
 export interface RunRow extends RunRecord {
   id: string;
-  projectId: string;
 }
 
 export interface SubgraphRow {
