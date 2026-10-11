@@ -2,8 +2,21 @@ import { create } from 'zustand';
 import type { GraphDoc, GraphEdge, GraphNode, TimelineDoc, Viewport } from '../types/graph';
 import { emptyGraph } from '../graph/migration';
 import { defaultParams, getNodeDef } from '../graph/registry';
-import { canConnect } from '../graph/validation';
+import { canConnect, downstreamNodeIds } from '../graph/validation';
 import { uid } from '../lib/ids';
+import { useExecStore } from './execStore';
+import { resultCache } from '../engine/cache';
+
+/** Mark a node and all downstream nodes stale (params/structure changed). */
+function touch(doc: { nodes: GraphNode[]; edges: GraphEdge[] }, nodeId: string): void {
+  try {
+    const affected = [nodeId, ...downstreamNodeIds({ schemaVersion: 3, nodes: doc.nodes, edges: doc.edges }, nodeId)];
+    for (const id of affected) resultCache.invalidate(id);
+    useExecStore.getState().markStaleDownstream(affected);
+  } catch {
+    /* staleness is best-effort UI state */
+  }
+}
 
 export interface GraphSnapshot {
   nodes: GraphNode[];
@@ -92,18 +105,24 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   updateNodeParams: (id, params) =>
-    set((s) => ({
-      ...pushHistory(s),
-      nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, params: { ...n.data.params, ...params } } } : n)),
-      dirty: true,
-    })),
+    set((s) => {
+      touch(s, id);
+      return {
+        ...pushHistory(s),
+        nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, params: { ...n.data.params, ...params } } } : n)),
+        dirty: true,
+      };
+    }),
 
   updateNodeData: (id, data) =>
-    set((s) => ({
-      ...pushHistory(s),
-      nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)),
-      dirty: true,
-    })),
+    set((s) => {
+      touch(s, id);
+      return {
+        ...pushHistory(s),
+        nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)),
+        dirty: true,
+      };
+    }),
 
   moveNodes: (moves) => {
     const map = new Map(moves.map((m) => [m.id, m]));
@@ -152,13 +171,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return null;
     }
     const edge: GraphEdge = { id: uid('e'), source, sourceHandle, target, targetHandle };
-    set((st) => ({ ...pushHistory(st), edges: [...st.edges, edge], dirty: true, lastConnectError: null }));
+    set((st) => {
+      touch({ nodes: st.nodes, edges: [...st.edges, edge] }, target);
+      return { ...pushHistory(st), edges: [...st.edges, edge], dirty: true, lastConnectError: null };
+    });
     return edge.id;
   },
 
   removeEdges: (ids) => {
     const setIds = new Set(ids);
-    set((s) => ({ ...pushHistory(s), edges: s.edges.filter((e) => !setIds.has(e.id)), dirty: true }));
+    set((s) => {
+      for (const e of s.edges) if (setIds.has(e.id)) touch(s, e.target);
+      return { ...pushHistory(s), edges: s.edges.filter((e) => !setIds.has(e.id)), dirty: true };
+    });
   },
 
   setSelected: (selectedNodeIds) => set({ selectedNodeIds }),

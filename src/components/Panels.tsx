@@ -7,6 +7,7 @@ import { useGraphStore } from '../stores/graphStore';
 import { AssetLibrary } from './AssetLibrary';
 import { TimelineEditor } from './TimelineEditor';
 import { PreviewPanel } from './PreviewPanel';
+import { retryFailedNodes } from '../engine/scheduler';
 
 export function LeftPanel() {
   const collapsed = useUIStore((s) => s.leftCollapsed);
@@ -85,7 +86,14 @@ export function BottomPanel() {
                     <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.error ?? r.outputHash ?? '—'}</td></tr>
                 ))}
               </tbody></table>
-            <p style={{ color: 'var(--text-2)', fontSize: 11 }}>Cache: {cacheStats.hits} hits · {cacheStats.misses} misses · {cacheStats.evictions} evictions</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+              <button className="btn" disabled={running || !Object.values(nodeRuns).some((r) => r.status === 'failed' || r.status === 'blocked')}
+                onClick={() => {
+                  const st = useGraphStore.getState();
+                  if (st.projectId) void retryFailedNodes({ projectId: st.projectId, doc: st.getDoc(), timeline: st.timeline });
+                }}>Retry failed</button>
+              <span style={{ color: 'var(--text-2)', fontSize: 11 }}>Cache: {cacheStats.hits} hits · {cacheStats.misses} misses · {cacheStats.evictions} evictions</span>
+            </div>
           </div>
         )}
         {tab === 'timeline' && <TimelineEditor />}

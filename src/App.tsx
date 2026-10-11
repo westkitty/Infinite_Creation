@@ -8,6 +8,7 @@ import { useGraphStore } from './stores/graphStore';
 import { useUIStore } from './stores/uiStore';
 import { useExecStore } from './stores/execStore';
 import { createProject, listProjects, loadProject, saveProject } from './persistence/projectService';
+import { cancelRun, executeGraph, isRunning } from './engine/scheduler';
 import { defaultTimeline } from './persistence/projectService';
 import { emptyGraph } from './graph/migration';
 
@@ -67,9 +68,19 @@ export default function App() {
   }, [dirty, doSave, setSaveStatus]);
 
   const handleRun = useCallback(() => {
-    log('Phase 1: execution engine arrives in Phase 3. Graph editing + persistence are live.');
+    const st = useGraphStore.getState();
+    if (!st.projectId) { log('No project open.'); return; }
+    if (isRunning()) { log('A run is already in progress.'); return; }
+    if (st.nodes.length === 0) { log('Nothing to run: the workflow is empty.'); return; }
+    void executeGraph({ projectId: st.projectId, doc: st.getDoc(), timeline: st.timeline }).catch((e) => {
+      log(`Run failed to start: ${e instanceof Error ? e.message : String(e)}`);
+    });
   }, [log]);
-  const handleCancel = useCallback(() => { log('Nothing to cancel yet (Phase 3).'); }, [log]);
+  const handleCancel = useCallback(() => {
+    if (!isRunning()) { log('No run in progress.'); return; }
+    cancelRun();
+    log('Cancellation requested…');
+  }, [log]);
   const handleExportJSON = useCallback(() => { log('Workflow JSON export arrives in Phase 7.'); }, [log]);
   const handleImportJSON = useCallback(() => { log('Workflow JSON import arrives in Phase 7.'); }, [log]);
   const handleSample = useCallback((_id: string) => { log('Sample projects arrive in Phase 8 (after the pipeline works).'); }, [log]);
