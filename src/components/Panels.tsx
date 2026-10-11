@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BatchModal } from './BatchModal';
 import { listProviders } from '../providers/registry';
 import { cacheInspector } from '../engine/scheduler';
@@ -19,6 +19,7 @@ export function LeftPanel() {
   const toggle = useUIStore((s) => s.toggleLeft);
   const ws = useUIStore((s) => s.workspace);
   const [tab, setTab] = useState<'nodes' | 'assets'>(ws === 'ASSETS' ? 'assets' : 'nodes');
+  useEffect(() => { if (ws === 'ASSETS') setTab('assets'); }, [ws]);
   if (collapsed) return <aside className="panel-left collapsed"><div className="panel-header"><button className="icon-btn" onClick={toggle} aria-label="Expand left panel">»</button></div></aside>;
   return (
     <aside className="panel-left">
@@ -58,6 +59,7 @@ export function BottomPanel() {
   const toggle = useUIStore((s) => s.toggleBottom);
   const ws = useUIStore((s) => s.workspace);
   const [tab, setTab] = useState<'queue' | 'timeline' | 'diagnostics'>(ws === 'ANIMATE' ? 'timeline' : 'queue');
+  useEffect(() => { if (ws === 'ANIMATE') setTab('timeline'); }, [ws]);
   const progress = useExecStore((s) => s.progress);
   const running = useExecStore((s) => s.running);
   const nodeRuns = useExecStore((s) => s.nodeRuns);
@@ -98,7 +100,8 @@ export function BottomPanel() {
                   const intensity = heatmap && r.durationMs !== undefined ? Math.min(0.5, (r.durationMs / max) * 0.5) : 0;
                   return (
                     <tr key={r.nodeId} style={intensity ? { background: `rgba(200,16,46,${intensity})` } : undefined}>
-                      <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.nodeId}</td>
+                      <td><button className="node-link" title="Select this node on the canvas"
+                        onClick={() => useGraphStore.getState().setSelected([r.nodeId])}>{r.nodeId}</button></td>
                       <td><span className="badge">{r.status}</span></td>
                       <td>{r.durationMs !== undefined ? `${r.durationMs.toFixed(1)} ms` : '—'}</td>
                       <td>{r.cacheHit ? 'hit' : 'miss'}</td>
@@ -121,8 +124,7 @@ export function BottomPanel() {
         {tab === 'diagnostics' && (
           <div style={{ display: 'flex', gap: 16 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ marginBottom: 6 }}><button className="btn" onClick={() => useExecStore.getState().clearLogs()}>Clear</button></div>
-              <div className="log">{diagnostics.length === 0 ? 'No diagnostics yet.' : diagnostics.map((d, i) => <div key={i} className="logline">{d}</div>)}</div>
+              <DiagnosticsLog lines={diagnostics} />
             </div>
             <div style={{ width: 340, flex: 'none' }}>
               <h4 style={{ margin: '0 0 4px', fontSize: 12 }}>Provider adapters</h4>
@@ -139,6 +141,27 @@ export function BottomPanel() {
           </div>
         )}
         <BatchModal open={batchOpen} onClose={() => setBatchOpen(false)} />
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticsLog({ lines }: { lines: string[] }) {
+  const [follow, setFollow] = useState(true);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (follow && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [lines.length, follow]);
+  return (
+    <div>
+      <div style={{ marginBottom: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button className="btn" onClick={() => useExecStore.getState().clearLogs()}>Clear</button>
+        <label style={{ fontSize: 11, color: 'var(--text-2)' }}>
+          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Follow new lines
+        </label>
+      </div>
+      <div className="log log-scroll" ref={ref} role="log" aria-live={follow ? 'polite' : 'off'}>
+        {lines.length === 0 ? 'No diagnostics yet.' : lines.map((d, i) => <div key={i} className="logline">{d}</div>)}
       </div>
     </div>
   );

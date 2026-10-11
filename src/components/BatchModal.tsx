@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGraphStore } from '../stores/graphStore';
 import { useAssetStore } from '../stores/assetStore';
 import { useExecStore } from '../stores/execStore';
@@ -16,6 +16,13 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [items, setItems] = useState<BatchItem[]>([]);
   const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (!open || running) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, running, onClose]);
 
   if (!open) return null;
   const toggle = (id: string) => {
@@ -71,13 +78,20 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
           {sources.length === 0 && <div className="issue">No Image Import node in this workflow — batch needs one to repoint.</div>}
           <div className="field">
             <label>Source node to repoint</label>
-            <select value={sourceNodeId} onChange={(e) => setSourceNodeId(e.target.value)}>
+            <select value={sourceNodeId} autoFocus onChange={(e) => setSourceNodeId(e.target.value)}>
               <option value="">— select —</option>
               {sources.map((n) => <option key={n.id} value={n.id}>{n.data.label || n.id} ({n.id.slice(0, 12)})</option>)}
             </select>
           </div>
           <div className="field">
-            <label>Input images ({checked.size} selected)</label>
+            <label>Input images ({checked.size} selected)
+              <span style={{ marginLeft: 8, display: 'inline-flex', gap: 4 }}>
+                <button className="btn ghost" style={{ padding: '1px 6px', fontSize: 11 }}
+                  onClick={() => setChecked(new Set(images.map((a) => a.id)))}>Select all</button>
+                <button className="btn ghost" style={{ padding: '1px 6px', fontSize: 11 }}
+                  onClick={() => setChecked(new Set())}>Clear</button>
+              </span>
+            </label>
             <div style={{ maxHeight: 180, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 6, padding: 6 }}>
               {images.map((a) => (
                 <label key={a.id} className="checkrow" style={{ marginBottom: 4 }}>

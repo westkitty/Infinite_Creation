@@ -27,6 +27,15 @@ function GraphCanvasInner() {
   const viewport = useGraphStore((s) => s.viewport);
   const snap = useUIStore((s) => s.snapToGrid);
   const lastConnectError = useGraphStore((s) => s.lastConnectError);
+  const clearConnectError = useGraphStore((s) => s.clearConnectError);
+  const selCount = useGraphStore((s) => s.selectedNodeIds.length);
+
+  // Connection-error toast auto-dismisses; a new error restarts the timer.
+  useEffect(() => {
+    if (!lastConnectError) return;
+    const t = window.setTimeout(() => clearConnectError(), 5000);
+    return () => window.clearTimeout(t);
+  }, [lastConnectError, clearConnectError]);
 
   const rfNodes: Node[] = useMemo(
     () =>
@@ -87,10 +96,17 @@ function GraphCanvasInner() {
   const flowNodesRef = useRef(flowNodes);
   flowNodesRef.current = flowNodes;
 
+  const selectedEdgeRef = useRef<Set<string>>(new Set());
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       onEdgesChange(changes);
-      for (const c of changes) if (c.type === 'remove') store.getState().removeEdges([c.id]);
+      for (const c of changes) {
+        if (c.type === 'remove') store.getState().removeEdges([c.id]);
+        if (c.type === 'select') {
+          if (c.selected) selectedEdgeRef.current.add(c.id);
+          else selectedEdgeRef.current.delete(c.id);
+        }
+      }
     },
     [onEdgesChange],
   );
@@ -126,10 +142,15 @@ function GraphCanvasInner() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); st.undo(); }
       else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); st.redo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (st.selectedNodeIds.length) st.duplicateNodes(st.selectedNodeIds); }
-      else if (e.key === 'Delete' || e.key === 'Backspace') { if (st.selectedNodeIds.length) st.removeNodes(st.selectedNodeIds); }
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (st.selectedNodeIds.length) st.removeNodes(st.selectedNodeIds);
+        if (selectedEdgeRef.current.size) { st.removeEdges([...selectedEdgeRef.current]); selectedEdgeRef.current.clear(); }
+      }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { copySelection(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteClipboard(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); useUIStore.getState().setCommandPaletteOpen(true); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); window.dispatchEvent(new CustomEvent('ics-save')); }
+      else if (e.key === '?') { useUIStore.getState().setShortcutsOpen(true); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -176,6 +197,10 @@ function GraphCanvasInner() {
             <button className="btn ghost" title="Add node — search every node (Ctrl K)" aria-label="Add node" onClick={() => useUIStore.getState().setCommandPaletteOpen(true)}>+ Node</button>
             <button className="btn ghost" title={`Snap to grid: ${snap ? 'on' : 'off'}`} onClick={() => useUIStore.getState().toggleSnap()}>Snap {snap ? 'On' : 'Off'}</button>
             <SubgraphButton />
+            <ZoomToSelection />
+            <span className="census" title="Nodes · edges · selected" aria-live="polite">
+              {nodes.length} nodes · {edges.length} edges{selCount > 0 ? ` · ${selCount} selected` : ''}
+            </span>
           </div>
         </Panel>
       </ReactFlow>
@@ -184,11 +209,19 @@ function GraphCanvasInner() {
           <div>
             <p><strong>Empty workflow.</strong></p>
             <p>Drag nodes from the left panel, or press <span className="kbd">Ctrl K</span> for the command palette.</p>
-            <p>Load a sample project from File menu to see a working pipeline.</p>
+            <div className="empty-actions">
+              <button className="btn primary" onClick={() => useUIStore.getState().setCommandPaletteOpen(true)}>Open command palette</button>
+              <button className="btn" onClick={() => window.dispatchEvent(new CustomEvent('ics-load-sample', { detail: 'A' }))}>Load sample A</button>
+            </div>
           </div>
         </div>
       )}
-      {lastConnectError && <div className="connect-error" role="alert">{lastConnectError}</div>}
+      {lastConnectError && (
+        <div className="connect-error" role="alert" key={lastConnectError}>
+          <span>{lastConnectError}</span>
+          <button className="icon-btn" onClick={() => clearConnectError()} aria-label="Dismiss connection error">✕</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -227,6 +260,22 @@ export function pasteClipboard() {
 
 export function connectionHint(sourceType: string, sourceHandle: string, targetType: string, targetHandle: string): string {
   return explainConnection(sourceType, sourceHandle, targetType, targetHandle);
+}
+
+function ZoomToSelection() {
+  const { fitView, getNodes } = useReactFlow();
+  const count = useGraphStore((s) => s.selectedNodeIds.length);
+  return (
+    <button className="btn ghost" disabled={count === 0}
+      title={count ? `Zoom to the ${count} selected node(s)` : 'Select one or more nodes to zoom to them'}
+      onClick={() => {
+        const ids = new Set(useGraphStore.getState().selectedNodeIds);
+        const targets = getNodes().filter((n) => ids.has(n.id));
+        if (targets.length) void fitView({ nodes: targets, padding: 0.3, duration: 200 });
+      }}>
+      Zoom to selection{count > 0 ? ` (${count})` : ''}
+    </button>
+  );
 }
 
 function SubgraphButton() {

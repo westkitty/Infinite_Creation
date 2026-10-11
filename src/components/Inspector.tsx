@@ -30,7 +30,12 @@ export function Inspector() {
           <tr><td>Warnings</td><td>{all.length - errors.length}</td></tr>
         </tbody></table>
         {all.slice(0, 20).map((i, k) => (
-          <div key={k} className={`issue${i.severity === 'warning' ? ' warning' : ''}`}>{i.message}</div>
+          i.nodeId ? (
+            <button key={k} className={`issue clickable${i.severity === 'warning' ? ' warning' : ''}`}
+              title="Select this node" onClick={() => useGraphStore.getState().setSelected([i.nodeId as string])}>{i.message}</button>
+          ) : (
+            <div key={k} className={`issue${i.severity === 'warning' ? ' warning' : ''}`}>{i.message}</div>
+          )
         ))}
         {all.length === 0 && <p style={{ color: 'var(--text-2)' }}>No issues detected.</p>}
       </div>
@@ -175,8 +180,11 @@ function ParamField(props: {
       {type === 'slider' && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="range" value={Number(value ?? 0)} min={props.min ?? 0} max={props.max ?? 100} step={props.step ?? 1}
-            onChange={(e) => set(Number(e.target.value))} aria-label={props.label} />
-          <span style={{ minWidth: 44, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11 }}>{String(value)}</span>
+            onChange={(e) => set(Number(e.target.value))} aria-label={props.label} style={{ flex: 1 }} />
+          <input type="number" value={Number(value ?? 0)} min={props.min ?? 0} max={props.max ?? 100} step={props.step ?? 1}
+            onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) set(n); }}
+            aria-label={`${props.label} value`} title="Type an exact value"
+            style={{ width: 64, background: 'var(--bg-0)', border: '1px solid var(--line)', borderRadius: 4, padding: 3, fontSize: 11, fontFamily: 'var(--mono)' }} />
         </div>
       )}
       {type === 'color' && <input type="color" value={String(value ?? '#ffffff')} onChange={(e) => set(e.target.value)} />}
@@ -191,10 +199,17 @@ function ParamField(props: {
         </select>
       )}
       {type === 'assetRef' && (
-        <select value={String(value ?? '')} onChange={(e) => set(e.target.value)}>
-          <option value="">— select asset —</option>
-          {props.assets.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.kind})</option>)}
-        </select>
+        <>
+          <select value={String(value ?? '')} onChange={(e) => set(e.target.value)}>
+            <option value="">— select asset —</option>
+            {props.assets.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.kind})</option>)}
+          </select>
+          {String(value ?? '') !== '' && !props.assets.some((a) => a.id === String(value)) && (
+            <div className="issue warning" style={{ marginTop: 6, marginBottom: 0 }}>
+              Referenced asset is not in this project's library — the node will fail until it is relinked or the asset is re-imported.
+            </div>
+          )}
+        </>
       )}
       {props.description && <div className="hint">{props.description}</div>}
     </div>

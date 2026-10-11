@@ -111,10 +111,11 @@ export function PreviewPanel() {
       <p style={{ fontSize: 11, color: out?.stale || status === 'failed' ? 'var(--warn)' : 'var(--text-2)', margin: '0 0 6px' }}>{stateLabel}</p>
       <ZoomStage url={url} beforeUrl={beforeUrl} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan} split={split} setSplit={setSplit} dimmed={!!out?.stale} />
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button className="btn" onClick={() => setZoom((z) => Math.min(8, +(z * 1.25).toFixed(2)))}>+</button>
-        <span style={{ fontSize: 11, minWidth: 48, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-        <button className="btn" onClick={() => setZoom((z) => Math.max(0.1, +(z / 1.25).toFixed(2)))}>−</button>
-        <button className="btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Reset</button>
+        <button className="btn" aria-label="Zoom in" title="Zoom in" onClick={() => setZoom((z) => Math.min(8, +(z * 1.25).toFixed(2)))}>+</button>
+        <button className="btn ghost" aria-label="Reset to 100%" title="Reset to 100% (1:1)" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+          style={{ minWidth: 52, justifyContent: 'center', fontFamily: 'var(--mono)', fontSize: 11 }}>{Math.round(zoom * 100)}%</button>
+        <button className="btn" aria-label="Zoom out" title="Zoom out" onClick={() => setZoom((z) => Math.max(0.1, +(z / 1.25).toFixed(2)))}>−</button>
+        <button className="btn" aria-label="Reset zoom and pan" title="Reset zoom and pan" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Reset</button>
         {beforeUrl && url && (
           <label style={{ fontSize: 11, display: 'flex', gap: 4, alignItems: 'center' }}>
             Split <input type="range" min={0} max={100} value={split} onChange={(e) => setSplit(Number(e.target.value))} style={{ width: 90 }} />
@@ -156,7 +157,22 @@ function ZoomStage(props: {
     <div
       ref={ref} className="preview-stage checker"
       style={{ cursor: 'grab', opacity: props.dimmed ? 0.65 : 1 }}
+      tabIndex={0} role="application"
+      aria-label={`Preview image at ${Math.round(props.zoom * 100)} percent. Arrow keys pan, plus and minus zoom, 0 resets.`}
       onWheel={(e) => { props.setZoom((z) => Math.min(8, Math.max(0.1, +(z * (e.deltaY < 0 ? 1.1 : 0.9)).toFixed(2)))); }}
+      onDoubleClick={() => { props.setZoom(1); props.setPan({ x: 0, y: 0 }); }}
+      onKeyDown={(e) => {
+        const step = 16 / props.zoom;
+        if (e.key === '+' || e.key === '=') props.setZoom((z) => Math.min(8, +(z * 1.25).toFixed(2)));
+        else if (e.key === '-' || e.key === '_') props.setZoom((z) => Math.max(0.1, +(z / 1.25).toFixed(2)));
+        else if (e.key === '0') { props.setZoom(1); props.setPan({ x: 0, y: 0 }); }
+        else if (e.key === 'ArrowLeft') props.setPan({ x: props.pan.x + step, y: props.pan.y });
+        else if (e.key === 'ArrowRight') props.setPan({ x: props.pan.x - step, y: props.pan.y });
+        else if (e.key === 'ArrowUp') props.setPan({ x: props.pan.x, y: props.pan.y + step });
+        else if (e.key === 'ArrowDown') props.setPan({ x: props.pan.x, y: props.pan.y - step });
+        else return;
+        e.preventDefault();
+      }}
       onPointerDown={(e) => {
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         drag.current = { x: e.clientX, y: e.clientY, px: props.pan.x, py: props.pan.y };

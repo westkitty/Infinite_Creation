@@ -98,8 +98,10 @@ export function TimelineEditor() {
           <button className="btn" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause' : 'Play'}>
             {playing ? '⏸ Pause' : '▶ Play'}
           </button>
-          <button className="btn" title="Step back one frame" onClick={() => { setPlaying(false); setTl({ playhead: quantize(Math.max(0, timeline.playhead - 1 / fps), fps) }); }}>⏮</button>
-          <button className="btn" title="Step forward one frame" onClick={() => { setPlaying(false); setTl({ playhead: quantize(Math.min(timeline.duration, timeline.playhead + 1 / fps), fps) }); }}>⏭</button>
+          <button className="btn" title="Go to start (Home)" aria-label="Go to start" onClick={() => { setPlaying(false); setTl({ playhead: 0 }); }}>⏮</button>
+          <button className="btn" title="Step back one frame (Left arrow)" aria-label="Step back one frame" onClick={() => { setPlaying(false); setTl({ playhead: quantize(Math.max(0, timeline.playhead - 1 / fps), fps) }); }}>◀</button>
+          <button className="btn" title="Step forward one frame (Right arrow)" aria-label="Step forward one frame" onClick={() => { setPlaying(false); setTl({ playhead: quantize(Math.min(timeline.duration, timeline.playhead + 1 / fps), fps) }); }}>▶</button>
+          <button className="btn" title="Go to end (End)" aria-label="Go to end" onClick={() => { setPlaying(false); setTl({ playhead: timeline.duration }); }}>⏭</button>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
             t={timeline.playhead.toFixed(3)}s · frame {Math.min(frame, totalFrames - 1) + 1}/{totalFrames} · {fps}fps
           </span>
@@ -112,7 +114,7 @@ export function TimelineEditor() {
             style={{ width: 56, background: 'var(--bg-0)', border: '1px solid var(--line)', borderRadius: 4, padding: 3 }} />s</label>
           <label style={{ fontSize: 11 }}>Zoom <input type="range" min={40} max={400} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} style={{ width: 80 }} /></label>
         </div>
-        <Ruler playhead={timeline.playhead} duration={timeline.duration} zoom={zoom}
+        <Ruler playhead={timeline.playhead} duration={timeline.duration} zoom={zoom} fps={fps}
           onScrub={(t) => { setPlaying(false); setTl({ playhead: quantize(Math.min(timeline.duration, Math.max(0, t)), fps) }); }} />
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <button className="btn" onClick={() => addTrack('image')}>+ Image track</button>
@@ -141,17 +143,31 @@ export function TimelineEditor() {
   );
 }
 
-function Ruler({ playhead, duration, zoom, onScrub }: { playhead: number; duration: number; zoom: number; onScrub: (t: number) => void }) {
+function Ruler({ playhead, duration, zoom, fps, onScrub }: { playhead: number; duration: number; zoom: number; fps: number; onScrub: (t: number) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const grid = Math.max(1, fps);
   const scrub = (clientX: number) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     onScrub((clientX - rect.left) / zoom);
   };
+  const step = (dt: number) => onScrub(Math.min(duration, Math.max(0, playhead + dt)));
   const ticks = [];
   for (let s = 0; s <= Math.ceil(duration); s++) ticks.push(s);
   return (
     <div ref={ref} className="timeline-ruler" style={{ width: Math.max(200, duration * zoom) }}
+      tabIndex={0} role="slider" aria-label="Timeline playhead"
+      aria-valuemin={0} aria-valuemax={Number(duration.toFixed(2))} aria-valuenow={Number(playhead.toFixed(3))}
+      aria-valuetext={`${playhead.toFixed(3)} seconds of ${duration.toFixed(1)}`}
+      onKeyDown={(e) => {
+        const frame = 1 / grid;
+        if (e.key === 'ArrowLeft') step(e.shiftKey ? -1 : -frame);
+        else if (e.key === 'ArrowRight') step(e.shiftKey ? 1 : frame);
+        else if (e.key === 'Home') onScrub(0);
+        else if (e.key === 'End') onScrub(duration);
+        else return;
+        e.preventDefault();
+      }}
       onPointerDown={(e) => {
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         scrub(e.clientX);

@@ -78,7 +78,7 @@ export function ExportWorkspace() {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto' }} aria-busy={busy}>
       <h2 style={{ margin: '0 0 8px' }}>Export</h2>
       {progress && (
         <div style={{ marginBottom: 8 }}>
@@ -87,12 +87,12 @@ export function ExportWorkspace() {
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <button className="btn primary" onClick={doExportJSON}>Export workflow JSON</button>
-        <button className="btn" onClick={() => void doImportJSON()}>Import workflow JSON…</button>
+        <button className="btn primary" disabled={busy} onClick={doExportJSON}>Export workflow JSON</button>
+        <button className="btn" disabled={busy} onClick={() => void doImportJSON()}>Import workflow JSON…</button>
         <button className="btn primary" disabled={!projectId || busy} onClick={() => void doExportArchive()}>
           {busy ? 'Working…' : 'Export project archive (.zip)'}
         </button>
-        <ArchiveImportButton onPick={(open) => void doImportArchive(open)} />
+        <ArchiveImportButton disabled={busy} onPick={(open) => void doImportArchive(open)} />
       </div>
       <h3 style={{ fontSize: 13 }}>Export artifacts ({artifacts.length})</h3>
       <p style={{ fontSize: 12, color: 'var(--text-2)' }}>
@@ -114,9 +114,9 @@ export function ExportWorkspace() {
   );
 }
 
-function ArchiveImportButton({ onPick }: { onPick: (open: (id: string) => void) => void }) {
+function ArchiveImportButton({ onPick, disabled }: { onPick: (open: (id: string) => void) => void; disabled: boolean }) {
   // Needs access to App's openProject — resolved via a tiny event to avoid prop drilling.
-  return <button className="btn" onClick={() => onPick((id) => window.dispatchEvent(new CustomEvent('ics-open-project', { detail: id })))}>Import project archive…</button>;
+  return <button className="btn" disabled={disabled} onClick={() => onPick((id) => window.dispatchEvent(new CustomEvent('ics-open-project', { detail: id })))}>Import project archive…</button>;
 }
 
 async function downloadAsset(assetId: string, name: string): Promise<void> {

@@ -12,6 +12,12 @@ export function SubgraphsModal({ open, onClose }: { open: boolean; onClose: () =
   const [desc, setDesc] = useState('');
   const refresh = () => listSubgraphs().then(setDefs).catch((e) => log(`Subgraph list failed: ${String(e)}`));
   useEffect(() => { if (open) { refresh(); setName(''); setDesc(''); } }, [open ]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
   const st = useGraphStore.getState();
@@ -32,7 +38,7 @@ export function SubgraphsModal({ open, onClose }: { open: boolean; onClose: () =
               </p>
               <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
                 <input className="search" style={{ flex: 1, minWidth: 160 }} placeholder="Name, e.g. Portrait crop + correction"
-                  value={name} onChange={(e) => setName(e.target.value)} />
+                  value={name} autoFocus onChange={(e) => setName(e.target.value)} aria-label="Subgraph name" />
                 <input className="search" style={{ flex: 1, minWidth: 160 }} placeholder="Description (optional)"
                   value={desc} onChange={(e) => setDesc(e.target.value)} />
                 <button className="btn primary" disabled={!name.trim()} onClick={() => {

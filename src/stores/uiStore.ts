@@ -21,6 +21,8 @@ interface UIState {
   setCompareMode: (v: boolean) => void;
   saveStatus: 'saved' | 'saving' | 'dirty' | 'error';
   setSaveStatus: (s: UIState['saveStatus']) => void;
+  shortcutsOpen: boolean;
+  setShortcutsOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -42,4 +44,6 @@ export const useUIStore = create<UIState>((set) => ({
   setCompareMode: (v) => set({ compareMode: v }),
   saveStatus: 'saved',
   setSaveStatus: (saveStatus) => set({ saveStatus }),
+  shortcutsOpen: false,
+  setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
 }));

@@ -223,3 +223,60 @@ table.kv th { color: var(--text-2); font-weight: 600; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Polish pass: menus, indicators, motion ---------- */
+
+/* TopBar dropdown menus (extracted from inline styles). */
+.modal.menu-pop { position: absolute; right: 0; top: 34px; width: 230px; z-index: 30; padding: 6px; }
+.modal.menu-pop.wide { width: 270px; }
+.cmdk-item .kbd { margin-left: auto; flex: none; }
+.cmdk-section { font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-2); padding: 8px 10px 3px; }
+.cmdk-foot { border-top: 1px solid var(--line); padding: 6px 10px; font-size: 11px; color: var(--text-2); }
+
+/* Save indicator is a button so errors are clickable to retry. */
+button.save-dot { background: none; border: none; padding: 3px 6px; border-radius: 4px; cursor: default; }
+button.save-dot:disabled { color: var(--text-2); }
+.save-dot.clickable { cursor: pointer; color: var(--text-0); }
+.save-dot.clickable:hover { background: var(--bg-3); }
+
+/* Canvas toolbar census readout. */
+.census { font-size: 11px; color: var(--text-2); align-self: center; padding: 0 6px; white-space: nowrap; font-family: var(--mono); }
+
+/* Node state overlays: stale output vs hard failure. */
+.studio-node.stale { border-style: dashed; border-color: var(--warn); }
+.studio-node.failed { border-color: var(--err); box-shadow: 0 0 0 1px var(--err), 0 4px 14px rgba(0,0,0,0.35); }
+
+/* Clickable health issues keep .issue visuals with button behavior. */
+button.issue { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+button.issue.clickable:hover { border-color: var(--info); background: var(--bg-3); }
+
+/* Queue node links. */
+.node-link { background: none; border: none; padding: 0; cursor: pointer; font-family: var(--mono); font-size: 11px; color: var(--info); }
+.node-link:hover { text-decoration: underline; }
+
+/* Diagnostics follow-tail scroll area. */
+.log.log-scroll { max-height: 148px; overflow-y: auto; }
+
+/* Interactive empty-canvas actions (the hint container stays click-through). */
+.empty-hint .empty-actions { pointer-events: auto; display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .census { display: none; }
+  .canvas-toolbar { max-width: calc(100vw - 120px); flex-wrap: wrap; }
+}
+
+/* Connection-error toast layout. */
+.connect-error { display: flex; align-items: center; gap: 8px; max-width: min(560px, 90vw); animation: toast-in 0.18s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* ---------- Purposeful micro-motion (all CSS, interruptible) ---------- */
+.modal-back { animation: fade-in 0.12s ease-out; }
+.modal { animation: modal-in 0.16s ease-out; }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.btn { transition: filter 0.12s, border-color 0.12s, background-color 0.12s; }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.ws-tab, .tab { transition: background-color 0.12s, border-color 0.12s, color 0.12s; }
+.nodeitem { transition: border-color 0.12s; }
+.asset-card { transition: border-color 0.12s, transform 0.12s; }
+.asset-card:hover { transform: translateY(-1px); }
+.save-dot .dot { transition: background-color 0.2s; }

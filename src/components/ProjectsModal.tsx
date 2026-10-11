@@ -6,7 +6,18 @@ export function ProjectsModal(props: { open: boolean; onClose: () => void; onOpe
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [name, setName] = useState('');
   const refresh = () => listProjects().then(setProjects);
+  const create = async () => {
+    const p = await createProject(name.trim() || 'Untitled Project');
+    await refresh();
+    props.onOpen(p.id);
+  };
   useEffect(() => { if (props.open) { refresh(); setName(''); } }, [props.open]);
+  useEffect(() => {
+    if (!props.open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [props.open, props.onClose]);
   if (!props.open) return null;
   return (
     <div className="modal-back" onClick={props.onClose}>
@@ -14,13 +25,14 @@ export function ProjectsModal(props: { open: boolean; onClose: () => void; onOpe
         <div className="panel-header">Projects <span className="spacer" /><button className="icon-btn" onClick={props.onClose}>✕</button></div>
         <div className="panel-body">
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <input className="search" placeholder="New project name…" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="btn primary" onClick={async () => { const p = await createProject(name || 'Untitled Project'); await refresh(); props.onOpen(p.id); }}>Create</button>
+            <input className="search" autoFocus placeholder="New project name… (Enter to create)" value={name} onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void create(); }} aria-label="New project name" />
+            <button className="btn primary" onClick={() => void create()}>Create</button>
           </div>
           <table className="kv"><thead><tr><th>Name</th><th>Updated</th><th>Actions</th></tr></thead><tbody>
             {projects.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}{p.id === props.currentId ? ' ●' : ''}</td>
+              <tr key={p.id} aria-current={p.id === props.currentId ? 'true' : undefined}>
+                <td>{p.name}{p.id === props.currentId ? <> <span className="badge info">current</span></> : ''}</td>
                 <td>{new Date(p.updatedAt).toLocaleString()}</td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

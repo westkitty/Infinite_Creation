@@ -4,6 +4,7 @@ import { LeftPanel, RightPanel, BottomPanel } from './components/Panels';
 import { GraphCanvas } from './components/GraphCanvas';
 import { ProjectsModal } from './components/ProjectsModal';
 import { CommandPalette } from './components/CommandPalette';
+import { ShortcutsModal } from './components/ShortcutsModal';
 import { AssetLibrary } from './components/AssetLibrary';
 import { StorageBar } from './components/StorageBar';
 import { PreviewPanel } from './components/PreviewPanel';
@@ -135,6 +136,21 @@ export default function App() {
     })();
   }, [log, openProject]);
 
+  // Canvas-level shortcuts that need App-owned actions (save / sample load).
+  useEffect(() => {
+    const onSaveEvt = () => { void doSave(); };
+    const onSampleEvt = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (id) handleSample(id);
+    };
+    window.addEventListener('ics-save', onSaveEvt);
+    window.addEventListener('ics-load-sample', onSampleEvt);
+    return () => {
+      window.removeEventListener('ics-save', onSaveEvt);
+      window.removeEventListener('ics-load-sample', onSampleEvt);
+    };
+  }, [doSave, handleSample]);
+
   return (
     <div className="app">
       <TopBar
@@ -171,6 +187,7 @@ export default function App() {
       </div>
       <ProjectsModal open={projectsOpen} onClose={() => setProjectsOpen(false)} onOpen={(id) => void openProject(id)} currentId={useGraphStore((s) => s.projectId)} />
       <CommandPalette onRun={handleRun} onSave={() => void doSave()} onOpenProjects={() => setProjectsOpen(true)} />
+      <ShortcutsModal />
     </div>
   );
 }

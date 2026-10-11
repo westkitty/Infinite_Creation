@@ -61,6 +61,7 @@ interface GraphState {
   clearHistory: () => void;
   markClean: () => void;
   getDoc: () => GraphDoc;
+  clearConnectError: () => void;
 }
 
 const HISTORY_LIMIT = 100;
@@ -215,6 +216,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   clearHistory: () => set({ past: [], future: [] }),
   markClean: () => set({ dirty: false }),
+  clearConnectError: () => set({ lastConnectError: null }),
   addLink: (sourceNodeId, sourceKey, targetNodeId, targetKey) => {
     const s = get();
     if (sourceNodeId === targetNodeId && sourceKey === targetKey) return null;

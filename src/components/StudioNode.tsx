@@ -18,11 +18,13 @@ function StudioNodeInner({ data, selected }: NodeProps) {
   const out = useExecStore((s) => s.outputs[d.nodeId]);
   if (!def) return <div className="studio-node"><div className="head"><span className="title">Unknown: {d.nodeType}</span></div></div>;
   const title = d.label || def.label;
+  const stale = !!out?.stale && status !== 'failed';
+  const failed = status === 'failed' || status === 'blocked';
   return (
     <div
-      className={`studio-node${selected ? ' selected' : ''}${d.disabled ? ' disabled' : ''}${def.unavailable ? ' unavailable' : ''}`}
+      className={`studio-node${selected ? ' selected' : ''}${d.disabled ? ' disabled' : ''}${def.unavailable ? ' unavailable' : ''}${stale ? ' stale' : ''}${failed ? ' failed' : ''}`}
       role="group"
-      aria-label={`${title} (${def.family}), status ${status}`}
+      aria-label={`${title} (${def.family}), status ${status}${stale ? ', output stale' : ''}`}
       title={def.description}
     >
       <div className="head">
@@ -49,7 +51,7 @@ function StudioNodeInner({ data, selected }: NodeProps) {
         </div>
       </div>
       <div className="foot" title={def.description}>
-        {def.unavailable ? 'UNAVAILABLE' : d.disabled ? 'disabled' : def.description.slice(0, 48)}
+        {def.unavailable ? 'UNAVAILABLE' : d.disabled ? 'disabled' : failed ? `${status} — see queue` : stale ? 'stale — run again' : def.description.slice(0, 48)}
       </div>
     </div>
   );

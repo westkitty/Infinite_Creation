@@ -117,7 +117,17 @@ export function AssetLibrary({ compact = false }: { compact?: boolean }) {
           <option value="name">Name</option>
           <option value="size">Size</option>
         </select>
-        <button className={`btn${favOnly ? ' primary' : ''}`} onClick={() => st.setFavoritesOnly(!favOnly)} title="Show favorites only">★</button>
+        <button className={`btn${favOnly ? ' primary' : ''}`} onClick={() => st.setFavoritesOnly(!favOnly)}
+          title="Show favorites only" aria-pressed={favOnly} aria-label="Show favorites only">★</button>
+        {(search.trim() !== '' || kindFilter !== 'all' || favOnly) && (
+          <button className="btn ghost" title="Clear search and filters"
+            onClick={() => { st.setSearch(''); st.setKindFilter('all'); st.setFavoritesOnly(false); }}>
+            ✕ Clear
+          </button>
+        )}
+        <span style={{ color: 'var(--text-2)', fontSize: 11, alignSelf: 'center', marginLeft: 'auto' }} aria-live="polite">
+          {filtered.length} of {assets.length} asset{assets.length === 1 ? '' : 's'}
+        </span>
       </div>
       {filtered.length === 0 && (
         <p style={{ color: 'var(--text-2)', fontSize: 12 }}>
@@ -152,7 +162,10 @@ function AssetCard({ asset, selected, onSelect }: { asset: AssetRecord; selected
   }, [asset.id]);
   return (
     <div ref={ref} className={`asset-card${selected ? ' selected' : ''}`} onClick={onSelect} role="button" tabIndex={0}
-      aria-label={`Asset ${asset.name}`} onKeyDown={(e) => { if (e.key === 'Enter') onSelect(); }}>
+      aria-label={`Asset ${asset.name}`} aria-pressed={selected}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); }
+      }}>
       {url && asset.kind !== 'audio' ? <img src={url} alt="" loading="lazy" /> : (
         <div className="thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', fontSize: 20 }}>
           {asset.kind === 'audio' ? '♪' : asset.kind === 'video' ? '▶' : asset.kind === 'model3d' ? '⬢' : '🖼'}
@@ -239,7 +252,7 @@ function AssetDetails({ asset }: { asset: AssetRecord }) {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <input className="search" placeholder="Add tag…" value={tagInput} onChange={(e) => setTagInput(e.target.value)}
+          <input className="search" placeholder="Add tag…" aria-label="New tag" value={tagInput} onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && tagInput.trim()) {
                 const tags = [...new Set([...asset.tags, tagInput.trim().toLowerCase()])];
@@ -247,6 +260,14 @@ function AssetDetails({ asset }: { asset: AssetRecord }) {
                 setTagInput('');
               }
             }} />
+          <button className="btn" disabled={!tagInput.trim()} title="Add tag"
+            onClick={() => {
+              const tags = [...new Set([...asset.tags, tagInput.trim().toLowerCase()])];
+              void updateAsset(asset.id, { tags }).then(() => st.upsert({ ...asset, tags }));
+              setTagInput('');
+            }}>
+            Add
+          </button>
         </div>
       </div>
     </div>
