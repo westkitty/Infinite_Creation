@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useFocusTrap } from '../lib/focusTrap';
 import { useUIStore } from '../stores/uiStore';
 
 const GROUPS: Array<{ title: string; rows: Array<[string, string]> }> = [
@@ -51,6 +52,8 @@ const GROUPS: Array<{ title: string; rows: Array<[string, string]> }> = [
 export function ShortcutsModal() {
   const open = useUIStore((s) => s.shortcutsOpen);
   const setOpen = useUIStore((s) => s.setShortcutsOpen);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef, open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -62,7 +65,7 @@ export function ShortcutsModal() {
   if (!open) return null;
   return (
     <div className="modal-back" onClick={() => setOpen(false)}>
-      <div className="modal" style={{ width: 'min(560px, 94vw)' }} onClick={(e) => e.stopPropagation()}
+      <div className="modal" ref={trapRef} style={{ width: 'min(560px, 94vw)' }} onClick={(e) => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
         <div className="panel-header">Keyboard shortcuts <span className="spacer" />
           <button className="icon-btn" autoFocus onClick={() => setOpen(false)} aria-label="Close shortcuts">✕</button>

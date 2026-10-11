@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../stores/uiStore';
+import { useFocusTrap } from '../lib/focusTrap';
 import { useGraphStore } from '../stores/graphStore';
 import { NODE_DEFS } from '../graph/registry';
 
@@ -15,6 +16,8 @@ export function CommandPalette(props: { onRun: () => void; onSave: () => void; o
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef, open);
   useEffect(() => { if (open) { setQ(''); setActive(0); } }, [open]);
   useEffect(() => { setActive(0); }, [q]);
 
@@ -57,7 +60,7 @@ export function CommandPalette(props: { onRun: () => void; onSave: () => void; o
   const fire = (e: Entry) => { e.run(); close(); };
   return (
     <div className="modal-back" onClick={close}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Command palette">
+      <div className="modal" ref={trapRef} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Command palette">
         <input className="cmdk-input" autoFocus placeholder="Search nodes and actions… (↑↓ + Enter)" value={q}
           onChange={(e) => setQ(e.target.value)}
           role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-activedescendant={`cmdk-${active}`}

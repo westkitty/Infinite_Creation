@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useFocusTrap } from '../lib/focusTrap';
 import type { ProjectMeta } from '../types/graph';
 import { createProject, deleteProject, duplicateProject, listProjects, renameProject } from '../persistence/projectService';
 
 export function ProjectsModal(props: { open: boolean; onClose: () => void; onOpen: (id: string) => void; currentId: string | null }) {
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
   const [name, setName] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef, props.open);
   const refresh = () => listProjects().then(setProjects);
   const create = async () => {
     const p = await createProject(name.trim() || 'Untitled Project');
@@ -21,7 +24,7 @@ export function ProjectsModal(props: { open: boolean; onClose: () => void; onOpe
   if (!props.open) return null;
   return (
     <div className="modal-back" onClick={props.onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} onClick={(e) => e.stopPropagation()}>
         <div className="panel-header">Projects <span className="spacer" /><button className="icon-btn" onClick={props.onClose}>✕</button></div>
         <div className="panel-body">
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>

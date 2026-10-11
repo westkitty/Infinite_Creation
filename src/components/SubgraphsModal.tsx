@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useFocusTrap } from '../lib/focusTrap';
 import { useGraphStore } from '../stores/graphStore';
 import { useExecStore } from '../stores/execStore';
 import { analyzeSelection, deleteSubgraph, instantiateSubgraph, listSubgraphs, saveSubgraph } from '../subgraphs/library';
@@ -10,6 +11,8 @@ export function SubgraphsModal({ open, onClose }: { open: boolean; onClose: () =
   const [defs, setDefs] = useState<SubgraphRow[]>([]);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef, open);
   const refresh = () => listSubgraphs().then(setDefs).catch((e) => log(`Subgraph list failed: ${String(e)}`));
   useEffect(() => { if (open) { refresh(); setName(''); setDesc(''); } }, [open ]);
   useEffect(() => {
@@ -25,7 +28,7 @@ export function SubgraphsModal({ open, onClose }: { open: boolean; onClose: () =
 
   return (
     <div className="modal-back" onClick={onClose}>
-      <div className="modal" style={{ width: 'min(640px, 94vw)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} style={{ width: 'min(640px, 94vw)' }} onClick={(e) => e.stopPropagation()}>
         <div className="panel-header">Reusable subgraphs <span className="spacer" /><button className="icon-btn" onClick={onClose}>✕</button></div>
         <div className="panel-body">
           <h4 style={{ margin: '0 0 6px' }}>Save current selection ({selected.length} nodes)</h4>

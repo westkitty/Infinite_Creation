@@ -185,6 +185,8 @@ async function mountThreeViewer(
   camera.position.set(2.5, 2, 3.5);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+  // Render-gate flag: declared before applySettings (which sets it on call).
+  let dirty = true;
 
   let gridHelper: T.GridHelper | null = null;
   const lightRig = new THREE.Group();
@@ -212,6 +214,7 @@ async function mountThreeViewer(
       gridHelper = new THREE.GridHelper(10, 20, 0x555a63, 0x33363f);
       scene.add(gridHelper);
     }
+    dirty = true;
   };
   applySettings(settings);
 
@@ -260,6 +263,7 @@ async function mountThreeViewer(
     camera.position.copy(center).add(new THREE.Vector3(dist * 0.6, dist * 0.45, dist * 0.8));
     controls.target.copy(center);
     controls.update();
+    dirty = true;
   };
   const homePos = camera.position.clone();
   const homeTarget = controls.target.clone();
@@ -289,12 +293,20 @@ async function mountThreeViewer(
     cancelAnimationFrame(raf);
   };
   renderer.domElement.addEventListener('webglcontextlost', onContextLost);
+  // Idle-gated loop: RAF ticks stay cheap, but mixer + GPU work happen only
+  // while the camera moves, a clip plays, or a dirty flag demands a frame.
+  // A static model therefore costs ~zero GPU instead of 60 renders/second.
   const loop = () => {
     if (contextLost) return;
     raf = requestAnimationFrame(loop);
-    mixer.update(clock.getDelta());
-    controls.update();
-    renderer.render(scene, camera);
+    const dt = clock.getDelta();
+    const playing = activeAction !== null;
+    if (playing) mixer.update(dt);
+    const moved = controls.update();
+    if (moved || playing || dirty) {
+      dirty = false;
+      renderer.render(scene, camera);
+    }
   };
   loop();
 
@@ -303,6 +315,7 @@ async function mountThreeViewer(
     renderer.setSize(w, height);
     camera.aspect = w / height;
     camera.updateProjectionMatrix();
+    dirty = true;
   };
   window.addEventListener('resize', onResize);
 
@@ -352,7 +365,7 @@ async function mountThreeViewer(
       animations: gltf.animations.map((a) => a.name || 'clip'),
     },
     dispose,
-    resetCamera: () => { camera.position.copy(homePos); controls.target.copy(homeTarget); controls.update(); },
+    resetCamera: () => { camera.position.copy(homePos); controls.target.copy(homeTarget); controls.update(); dirty = true; },
     fit,
     applySettings,
     playClip,

@@ -3,7 +3,7 @@
 Honest list of what v1 does not do, with workarounds where they exist.
 
 1. **No automated browser E2E in this environment.** Unit/integration suites
-   (69 tests) run in Node+jsdom. Canvas/three.js/worker-thread paths are
+   (81 tests) run in Node+jsdom. Canvas/three.js/worker-thread paths are
    implemented but were not executed by automation here (no browser runtime
    in the sandbox). Manual browser pass recommended: load each sample, run,
    download, reload, archive round-trip, GLB load.
@@ -12,8 +12,8 @@ Honest list of what v1 does not do, with workarounds where they exist.
 3. **Resize quality `low/medium/high` are all bilinear** in v1; only
    `pixelated` (nearest) differs. No visual-consequence bug, but the options
    over-promise — kept for forward compatibility.
-4. **No video/audio processing or containers.** Timeline output is a PNG
-   sequence; multi-file download may need a browser allow-list confirmation.
+4. **No video/audio processing or containers.** Timeline output is a single
+   `.zip` of PNGs (one download — no multi-file allow-list friction).
 5. **No GPU acceleration.** CPU pixel ops in workers; very large images
    (>50 MP) will be slow and may hit the 384 MB intermediate cache cap
    (eviction is safe: recompute on demand).

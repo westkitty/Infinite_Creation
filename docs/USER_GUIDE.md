@@ -64,7 +64,7 @@ Bottom *Timeline* tab or the ANIMATE workspace canvas. Add image tracks,
 attach library images as frames, set clip windows, add opacity/transform
 tracks with linear/hold keyframes. Play, step frame-by-frame, scrub the
 ruler. Frame evaluation is deterministic (pure function of time, no drift).
-Export is a **PNG sequence** — no video container is claimed.
+Export is a **single `.zip` of PNGs** — no video container is claimed.
 
 ## 6. 3D (INSPECT ▸ 3D viewer)
 
@@ -83,6 +83,7 @@ when the viewer is mounted).
   compatible param (Inspector ▸ Parameter links).
 - **Batch**: queue header *Batch…* runs the workflow against many images
   sequentially (bounded concurrency = 1), saving each artifact.
+  *Cancel batch* stops after the current item; completed items keep theirs.
 
 ## 8. Exporting and backup
 

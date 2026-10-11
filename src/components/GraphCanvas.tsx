@@ -38,16 +38,19 @@ function GraphCanvasInner() {
     return () => window.clearTimeout(t);
   }, [lastConnectError, clearConnectError]);
 
-  const rfNodes: Node[] = useMemo(
-    () =>
-      nodes.map((n) => ({
-        id: n.id,
-        type: 'studio',
-        position: n.position,
-        data: { nodeId: n.id, nodeType: n.type, label: n.data.label, disabled: n.data.disabled, note: n.data.note },
-      })),
-    [nodes],
-  );
+  // Canvas highlight follows store selection, so Inspector/queue/history
+  // "select node" actions visibly highlight the node on the canvas.
+  const selectedIds = useGraphStore((s) => s.selectedNodeIds);
+  const rfNodes: Node[] = useMemo(() => {
+    const sel = new Set(selectedIds);
+    return nodes.map((n) => ({
+      id: n.id,
+      type: 'studio',
+      position: n.position,
+      selected: sel.has(n.id),
+      data: { nodeId: n.id, nodeType: n.type, label: n.data.label, disabled: n.data.disabled, note: n.data.note },
+    }));
+  }, [nodes, selectedIds]);
   const running = useExecStore((s) => s.running);
   const rfEdges: Edge[] = useMemo(
     () => edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, animated: running })),
@@ -58,7 +61,15 @@ function GraphCanvasInner() {
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(rfEdges);
 
   useEffect(() => setFlowNodes(rfNodes), [rfNodes, setFlowNodes]);
-  useEffect(() => setFlowEdges(rfEdges), [rfEdges, setFlowEdges]);
+  // Edge selection lives only in ReactFlow: preserve it across store syncs
+  // (run start/end flips `animated`, which must not clear the highlight).
+  useEffect(() => {
+    setFlowEdges((prev) => {
+      const sel = new Set(prev.filter((e) => e.selected).map((e) => e.id));
+      if (sel.size === 0) return rfEdges;
+      return rfEdges.map((e) => (sel.has(e.id) ? { ...e, selected: true } : e));
+    });
+  }, [rfEdges, setFlowEdges]);
 
   const store = useGraphStore;
   const dragTimer = useRef<number | null>(null);

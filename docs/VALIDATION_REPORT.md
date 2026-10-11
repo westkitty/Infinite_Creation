@@ -46,3 +46,17 @@ button; dead preview code removed; accessible node roles/labels added.
   no browser runtime in this sandbox. Recommended manual script is in
   `LIMITATIONS.md` §1. All browser-dependent code paths degrade with
   explicit errors where the capability is absent.
+
+## Uplift passes (2026-10-11, same branch, same sandbox)
+
+Pass 1 (`57a48fa`): run-history browser, lineage graph, live edge animation.
+Pass 2 (this change): modal focus traps, store-driven canvas selection,
+batch cancel, timeline `.zip` export, idle-gated 3D render loop.
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `npm run typecheck` | **pass, 0 errors** |
+| 2 | `npx vitest run` | **14 files, 81/81 pass** (graph 8, ops 17, png 4, executors 9, scheduler 7, timeline 3, persistence 5, portability 6, subgraphs 6, samples 4, history 4, lineage 3, provenance-panel 1, focusTrap 4) |
+| 3 | `npm run build` | **pass** — no new dependencies (jszip reuse for timeline zip) |
+| 4 | `vite preview` + `curl /` | **200**, correct `index.html` |
+| 5 | `git diff --check` + full diff review | clean; no debug/secrets/churn |

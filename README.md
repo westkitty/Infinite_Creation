@@ -11,7 +11,7 @@ provenance, subgraphs, batch runs, and checksummed portable archives.
 npm install
 npm run dev      # develop
 npm run build    # typecheck + production build -> dist/
-npm test         # 69 automated tests (vitest)
+npm test         # 81 automated tests (vitest)
 ```
 
 Serve `dist/` from any static server for offline use — no runtime network,

@@ -15,7 +15,7 @@ Legend: **WORKING AND TESTED** · **IMPLEMENTED BUT NOT VERIFIED** ·
 | Cancellation (AbortController + generation tokens) | WORKING AND TESTED | `scheduler.test.ts` |
 | Retry failed slice | WORKING AND TESTED | `retryFailedNodes` (exercised via scheduler paths) |
 | Deterministic cache + invalidation + eviction | WORKING AND TESTED | `cache.ts`, scheduler tests |
-| Run history (persisted, capped) | WORKING AND TESTED | Dexie `runs`, scheduler tests |
+| Run history (persisted, capped) + history browser | WORKING AND TESTED | Dexie `runs`, scheduler + history tests; browser UI browser-only |
 | Undo/redo, copy/paste, duplicate, box select | WORKING AND TESTED | `graphStore` (unit-covered via store logic; gesture-level browser-only) |
 | Subgraph save/insert/inline expansion | WORKING AND TESTED | `subgraphs/library.ts`, tests |
 | Parameter linking (numeric/color, one-level) | WORKING AND TESTED | `resolveLinkedParams`, tests |
@@ -63,13 +63,13 @@ Legend: **WORKING AND TESTED** · **IMPLEMENTED BUT NOT VERIFIED** ·
 |---|---|---|
 | Tracks/clips/keyframes (linear+hold), scrub/play/step | IMPLEMENTED BUT NOT VERIFIED | logic tested (`timeline.test.ts`); transport UI browser-only |
 | Deterministic frame eval, no drift | WORKING AND TESTED | `timeline.test.ts` |
-| PNG sequence export | IMPLEMENTED BUT NOT VERIFIED | shares tested renderer; download flow browser-only |
+| PNG sequence export (single .zip) | IMPLEMENTED BUT NOT VERIFIED | shares tested renderer; zip/download flow browser-only |
 | GLB viewer (orbit/pan/zoom, lights, grid, stats, anims, snapshot, disposal) | IMPLEMENTED BUT NOT VERIFIED | three.js code complete; needs browser + sample GLB |
 | Model Snapshot node | PARTIALLY IMPLEMENTED | works when viewer mounted (bridge); honest error otherwise |
 | Unified preview (zoom/pan/compare/download/snapshot) | IMPLEMENTED BUT NOT VERIFIED | browser-only rendering |
 | Audio/video playback in preview | NOT IMPLEMENTED | assets import; playback UI not built |
 | Before/after compare + heatmap + dependency/cache inspectors | IMPLEMENTED BUT NOT VERIFIED | UI complete; browser-only |
-| Provenance/lineage panel | IMPLEMENTED BUT NOT VERIFIED | reads tested records; browser-only |
+| Provenance/lineage panel + lineage graph | IMPLEMENTED BUT NOT VERIFIED | model tested (`lineage.test.ts`), graph interaction tested (`ProvenancePanel.test.tsx`); pixels browser-only |
 
 ## Portability
 

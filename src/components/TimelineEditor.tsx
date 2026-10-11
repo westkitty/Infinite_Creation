@@ -6,7 +6,8 @@ import type { TimelineTrack } from '../types/graph';
 import { renderTimelineFrame } from '../engine/executors';
 import { getAssetBlob } from '../assets/repository';
 import { decodeImageBlob } from '../media/codec';
-import { uid } from '../lib/ids';
+import { formatBytes, uid } from '../lib/ids';
+import JSZip from 'jszip';
 
 const quantize = (t: number, fps: number) => Math.round(t * fps) / fps;
 
@@ -259,9 +260,9 @@ function SequenceExport() {
   const [busy, setBusy] = useState(false);
   return (
     <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <button className="btn" disabled={busy} title="Render every frame on the fps grid and download as PNGs (one at a time)"
+      <button className="btn" disabled={busy} title="Render every frame on the fps grid and download as one .zip of PNGs"
         onClick={() => void exportSequence(log, setBusy)}>
-        {busy ? 'Rendering…' : 'Export frames (PNG)'}
+        {busy ? 'Rendering…' : 'Export frames (.zip of PNGs)'}
       </button>
       <span style={{ fontSize: 11, color: 'var(--text-2)' }}>No MP4/WebM encoder is claimed — PNG sequence only.</span>
     </div>
@@ -277,6 +278,10 @@ async function exportSequence(log: (m: string) => void, setBusy: (b: boolean) =>
     const frames = Math.max(1, Math.round(tl.duration * fps));
     if (frames > 300) throw new Error(`Refusing to export ${frames} frames in-browser (cap 300) — shorten the timeline`);
     const ctrl = new AbortController();
+    // One .zip: browsers throttle or block hundreds of sequential downloads,
+    // and the frame cap above bounds peak zip memory. (jszip already ships
+    // with the app for project archives — no new dependency weight.)
+    const zip = new JSZip();
     for (let f = 0; f < frames; f++) {
       const t = f / fps;
       const img = await renderTimelineFrame(
@@ -295,13 +300,15 @@ async function exportSequence(log: (m: string) => void, setBusy: (b: boolean) =>
       canvas.getContext('2d')?.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
       if (!blob) throw new Error('PNG encoding failed');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `frame_${String(f).padStart(4, '0')}.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      zip.file(`frame_${String(f).padStart(4, '0')}.png`, blob);
     }
-    log(`Exported ${frames} PNG frames.`);
+    const out = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(out);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'timeline_frames.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+    log(`Exported ${frames} PNG frames as timeline_frames.zip (${formatBytes(out.size)}).`);
   } catch (e) {
     log(`Sequence export failed: ${e instanceof Error ? e.message : String(e)}`);
   } finally {

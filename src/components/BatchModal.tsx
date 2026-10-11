@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusTrap } from '../lib/focusTrap';
 import { useGraphStore } from '../stores/graphStore';
 import { useAssetStore } from '../stores/assetStore';
 import { useExecStore } from '../stores/execStore';
-import { executeGraph, isRunning } from '../engine/scheduler';
+import { cancelRun, executeGraph, isRunning } from '../engine/scheduler';
 
-interface BatchItem { assetId: string; name: string; status: 'pending' | 'running' | 'ok' | 'failed'; error?: string }
+interface BatchItem { assetId: string; name: string; status: 'pending' | 'running' | 'ok' | 'failed' | 'cancelled'; error?: string }
 
 export function BatchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nodes = useGraphStore((s) => s.nodes);
@@ -16,6 +17,9 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [items, setItems] = useState<BatchItem[]>([]);
   const [running, setRunning] = useState(false);
+  const trapRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(trapRef, open);
+  const cancelRef = useRef(false);
 
   useEffect(() => {
     if (!open || running) return;
@@ -30,17 +34,19 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
     if (next.has(id)) next.delete(id); else next.add(id);
     setChecked(next);
   };
-  const done = items.filter((i) => i.status === 'ok' || i.status === 'failed').length;
+  const done = items.filter((i) => i.status === 'ok' || i.status === 'failed' || i.status === 'cancelled').length;
 
   const run = async () => {
     const st = useGraphStore.getState();
     if (!st.projectId || !sourceNodeId || checked.size === 0 || isRunning()) return;
+    cancelRef.current = false;
     setRunning(true);
     const queue = images.filter((a) => checked.has(a.id));
     setItems(queue.map((a) => ({ assetId: a.id, name: a.name, status: 'pending' })));
     // Sequential execution (bounded concurrency = 1): each item runs the full
     // workflow with the source node repointed. Memory-safe for large batches.
     for (const a of queue) {
+      if (cancelRef.current) break;
       setItems((prev) => prev.map((i) => (i.assetId === a.id ? { ...i, status: 'running' } : i)));
       const doc = st.getDoc();
       const target = doc.nodes.find((n) => n.id === sourceNodeId);
@@ -54,6 +60,9 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
         if (rec.status === 'completed') {
           setItems((prev) => prev.map((i) => (i.assetId === a.id ? { ...i, status: 'ok' } : i)));
           log(`Batch: ${a.name} → completed (${rec.runId})`);
+        } else if (cancelRef.current) {
+          setItems((prev) => prev.map((i) => (i.assetId === a.id ? { ...i, status: 'cancelled', error: rec.error ?? 'cancelled by user' } : i)));
+          log(`Batch: ${a.name} → cancelled.`);
         } else {
           setItems((prev) => prev.map((i) => (i.assetId === a.id ? { ...i, status: 'failed', error: rec.error } : i)));
           log(`Batch: ${a.name} → ${rec.status}: ${rec.error}`);
@@ -62,13 +71,21 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
         setItems((prev) => prev.map((i) => (i.assetId === a.id ? { ...i, status: 'failed', error: e instanceof Error ? e.message : String(e) } : i)));
       }
     }
+    const cancelled = cancelRef.current;
+    if (cancelled) {
+      setItems((prev) => prev.map((i) => (
+        i.status === 'running' || i.status === 'pending' ? { ...i, status: 'cancelled', error: 'cancelled by user' } : i
+      )));
+    }
     setRunning(false);
-    log(`Batch finished: ${queue.length} item(s) processed sequentially.`);
+    log(cancelled
+      ? 'Batch cancelled by user — completed items keep their artifacts.'
+      : `Batch finished: ${queue.length} item(s) processed sequentially.`);
   };
 
   return (
     <div className="modal-back" onClick={() => { if (!running) onClose(); }}>
-      <div className="modal" style={{ width: 'min(600px, 94vw)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" ref={trapRef} style={{ width: 'min(600px, 94vw)' }} onClick={(e) => e.stopPropagation()}>
         <div className="panel-header">Batch processing <span className="spacer" /><button className="icon-btn" disabled={running} onClick={onClose}>✕</button></div>
         <div className="panel-body">
           <p style={{ fontSize: 12, color: 'var(--text-1)' }}>
@@ -111,9 +128,17 @@ export function BatchModal({ open, onClose }: { open: boolean; onClose: () => vo
               </tbody></table>
             </div>
           )}
-          <button className="btn primary" disabled={running || !sourceNodeId || checked.size === 0 || sources.length === 0} onClick={() => void run()}>
-            {running ? `Running… (${done}/${items.length})` : 'Run batch'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn primary" disabled={running || !sourceNodeId || checked.size === 0 || sources.length === 0} onClick={() => void run()}>
+              {running ? `Running… (${done}/${items.length})` : 'Run batch'}
+            </button>
+            {running && (
+              <button className="btn danger" title="Stop after the current item (completed items keep their artifacts)"
+                onClick={() => { cancelRef.current = true; cancelRun(); }}>
+                Cancel batch
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
