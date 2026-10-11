@@ -3,8 +3,28 @@ import { useAssetStore } from '../stores/assetStore';
 import { useGraphStore } from '../stores/graphStore';
 import { useExecStore } from '../stores/execStore';
 import { deleteAsset, importFile, listAssets, thumbUrlFor, updateAsset } from '../assets/repository';
+import { findAssetReferences, relinkAsset, verifyProjectAssets } from '../assets/recovery';
 import { formatBytes } from '../lib/ids';
 import type { AssetRecord } from '../types/graph';
+
+export function VerifyButton() {
+  const projectId = useGraphStore((s) => s.projectId);
+  const log = useExecStore((s) => s.log);
+  const [busy, setBusy] = useState(false);
+  return (
+    <button className="btn" disabled={!projectId || busy} title="Check every asset record for its stored binary"
+      onClick={() => {
+        if (!projectId) return;
+        setBusy(true);
+        verifyProjectAssets(projectId)
+          .then((r) => log(`Library verified: ${r.healthy}/${r.checked} healthy${r.missing.length ? `, ${r.missing.length} missing: ${r.missing.join(', ')}` : ''}`))
+          .catch((e) => log(`Verification failed: ${e instanceof Error ? e.message : String(e)}`))
+          .finally(() => setBusy(false));
+      }}>
+      {busy ? 'Verifying…' : 'Verify library'}
+    </button>
+  );
+}
 
 export function AssetLibrary({ compact = false }: { compact?: boolean }) {
   const projectId = useGraphStore((s) => s.projectId);
@@ -67,6 +87,7 @@ export function AssetLibrary({ compact = false }: { compact?: boolean }) {
       <input ref={fileRef} type="file" multiple hidden
         accept="image/*,audio/*,video/*,.glb,.gltf"
         onChange={(e) => { if (e.target.files?.length) void doImport(e.target.files); e.target.value = ''; }} />
+      {!compact && <div style={{ marginBottom: 8 }}><VerifyButton /></div>}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <button className="btn primary" disabled={busy || !projectId} onClick={() => fileRef.current?.click()}>
           {busy ? 'Importing…' : '+ Import'}
@@ -155,9 +176,27 @@ function AssetDetails({ asset }: { asset: AssetRecord }) {
   const st = useAssetStore.getState();
   const log = useExecStore((s) => s.log);
   const [tagInput, setTagInput] = useState('');
+  const nodes = useGraphStore((s) => s.nodes);
+  const refs = findAssetReferences({ nodes }, asset.id);
+  const relinkRef = useRef<HTMLInputElement>(null);
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+      <input ref={relinkRef} type="file" hidden onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (f) {
+          relinkAsset(asset.id, f, f.name)
+            .then(() => log(`Relinked ${asset.name} → ${f.name}`))
+            .catch((err) => log(`Relink failed: ${err instanceof Error ? err.message : String(err)}`));
+        }
+        e.target.value = '';
+      }} />
       <h4 style={{ margin: '0 0 6px', fontSize: 12 }}>{asset.name}</h4>
+      {asset.missing && (
+        <div className="issue">
+          Binary missing from storage. Workflows referencing this asset will fail until it is relinked.
+          <div style={{ marginTop: 6 }}><button className="btn primary" onClick={() => relinkRef.current?.click()}>Relink file…</button></div>
+        </div>
+      )}
       <table className="kv"><tbody>
         <tr><td>Kind</td><td>{asset.kind} · {asset.mime}</td></tr>
         <tr><td>Size</td><td>{formatBytes(asset.size)}</td></tr>
@@ -168,6 +207,7 @@ function AssetDetails({ asset }: { asset: AssetRecord }) {
         {asset.provenance?.nodeType && (
           <tr><td>Provenance</td><td>{asset.provenance.nodeType} v{asset.provenance.nodeVersion} · run {(asset.provenance.runId ?? '—').slice(0, 12)}</td></tr>
         )}
+        <tr><td>Referenced by</td><td>{refs.length === 0 ? 'no nodes' : refs.map((r) => `${r.nodeType} (${r.nodeId.slice(0, 10)})`).join(', ')}</td></tr>
       </tbody></table>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         <button className="btn" onClick={() => { void updateAsset(asset.id, { favorite: !asset.favorite }).then(() => st.upsert({ ...asset, favorite: !asset.favorite })); }}>

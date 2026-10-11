@@ -4,6 +4,8 @@ import { LeftPanel, RightPanel, BottomPanel } from './components/Panels';
 import { GraphCanvas } from './components/GraphCanvas';
 import { ProjectsModal } from './components/ProjectsModal';
 import { CommandPalette } from './components/CommandPalette';
+import { AssetLibrary } from './components/AssetLibrary';
+import { StorageBar } from './components/StorageBar';
 import { useGraphStore } from './stores/graphStore';
 import { useUIStore } from './stores/uiStore';
 import { useExecStore } from './stores/execStore';
@@ -98,6 +100,14 @@ export default function App() {
         <div className="center">
           {workspace === 'CREATE' || workspace === 'ANIMATE' ? (
             <GraphCanvas />
+          ) : workspace === 'ASSETS' ? (
+            <div className="canvas-wrap" style={{ overflow: 'auto', padding: 12 }}>
+              <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+                <h2 style={{ margin: '0 0 8px' }}>Assets</h2>
+                <StorageBar />
+                <AssetLibrary />
+              </div>
+            </div>
           ) : (
             <WorkspacePlaceholder />
           )}
@@ -115,7 +125,7 @@ function WorkspacePlaceholder() {
   const ws = useUIStore((s) => s.workspace);
   const setWs = useUIStore((s) => s.setWorkspace);
   const copy: Record<string, string> = {
-    ASSETS: 'The ASSETS workspace (full library, tagging, search) is implemented in Phase 4. The Assets tab in the left panel is its preview.',
+    ASSETS: '',
     INSPECT: 'The INSPECT workspace (large preview + provenance) is implemented in Phase 5. Use the Preview tab on the right today.',
     EXPORT: 'The EXPORT workspace (artifacts + packaging) is implemented in Phases 2/7. Export nodes land with the media pipeline.',
   };
