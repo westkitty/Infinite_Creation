@@ -65,8 +65,23 @@ interface GraphState {
 }
 
 const HISTORY_LIMIT = 100;
+const COALESCE_WINDOW_MS = 800;
 
-function pushHistory(s: GraphState): Partial<GraphState> {
+// Coalescing: rapid successive micro-edits to the same target (typing a
+// label, dragging a slider) share one undo entry instead of flooding the
+// stack with a deep clone per keystroke. Structural edits always push.
+let lastPush = { at: 0, key: '' };
+
+function resetCoalescing(): void {
+  lastPush = { at: 0, key: '' };
+}
+
+function pushHistory(s: GraphState, coalesceKey?: string): Partial<GraphState> {
+  const now = Date.now();
+  if (coalesceKey && coalesceKey === lastPush.key && now - lastPush.at < COALESCE_WINDOW_MS) {
+    return { future: [] }; // merge into the pending entry; redo still dies
+  }
+  lastPush = { at: now, key: coalesceKey ?? '' };
   const past = [...s.past, { nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links) }];
   if (past.length > HISTORY_LIMIT) past.shift();
   return { past, future: [] };
@@ -86,14 +101,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   future: [],
   lastConnectError: null,
 
-  loadProject: (projectId, name, graph, timeline) =>
+  loadProject: (projectId, name, graph, timeline) => {
+    resetCoalescing();
     set({
       projectId, projectName: name,
       nodes: clone(graph.nodes), edges: clone(graph.edges), links: clone(graph.links ?? []),
       viewport: graph.viewport ?? { x: 0, y: 0, zoom: 1 },
       timeline: clone(timeline),
       selectedNodeIds: [], dirty: false, past: [], future: [], lastConnectError: null,
-    }),
+    });
+  },
 
   setViewport: (viewport) => set({ viewport, dirty: true }),
 
@@ -114,7 +131,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set((s) => {
       touch(s, id);
       return {
-        ...pushHistory(s),
+        ...pushHistory(s, `params:${id}`),
         nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, params: { ...n.data.params, ...params } } } : n)),
         dirty: true,
       };
@@ -124,7 +141,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set((s) => {
       touch(s, id);
       return {
-        ...pushHistory(s),
+        ...pushHistory(s, `data:${id}`),
         nodes: s.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)),
         dirty: true,
       };
@@ -198,23 +215,30 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   setSelected: (selectedNodeIds) => set({ selectedNodeIds }),
   setTimeline: (timeline) => set({ timeline, dirty: true }),
 
-  undo: () =>
+  undo: () => {
+    resetCoalescing();
     set((s) => {
       if (s.past.length === 0) return {};
       const prev = s.past[s.past.length - 1];
       const future = [...s.future, { nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links) }];
       return { nodes: clone(prev.nodes), edges: clone(prev.edges), links: clone(prev.links ?? []), past: s.past.slice(0, -1), future, dirty: true };
-    }),
+    });
+  },
 
-  redo: () =>
+  redo: () => {
+    resetCoalescing();
     set((s) => {
       if (s.future.length === 0) return {};
       const next = s.future[s.future.length - 1];
       const past = [...s.past, { nodes: clone(s.nodes), edges: clone(s.edges), links: clone(s.links) }];
       return { nodes: clone(next.nodes), edges: clone(next.edges), future: s.future.slice(0, -1), past, dirty: true };
-    }),
+    });
+  },
 
-  clearHistory: () => set({ past: [], future: [] }),
+  clearHistory: () => {
+    resetCoalescing();
+    set({ past: [], future: [] });
+  },
   markClean: () => set({ dirty: false }),
   clearConnectError: () => set({ lastConnectError: null }),
   addLink: (sourceNodeId, sourceKey, targetNodeId, targetKey) => {

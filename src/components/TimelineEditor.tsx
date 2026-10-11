@@ -4,8 +4,7 @@ import { useAssetStore } from '../stores/assetStore';
 import { useExecStore } from '../stores/execStore';
 import type { TimelineTrack } from '../types/graph';
 import { renderTimelineFrame } from '../engine/executors';
-import { getAssetBlob } from '../assets/repository';
-import { decodeImageBlob } from '../media/codec';
+import { loadImageAssetCached } from '../assets/repository';
 import { formatBytes, uid } from '../lib/ids';
 import JSZip from 'jszip';
 
@@ -58,11 +57,7 @@ export function TimelineEditor() {
     const ctrl = new AbortController();
     renderTimelineFrame(
       {
-        loadImageAsset: async (id) => {
-          const blob = await getAssetBlob(id);
-          if (!blob) throw new Error(`Asset ${id} missing`);
-          return decodeImageBlob(blob);
-        },
+        loadImageAsset: (id) => loadImageAssetCached(id, ctrl.signal),
         signal: ctrl.signal,
       },
       tl, tl.playhead, 320, 200,
@@ -286,11 +281,7 @@ async function exportSequence(log: (m: string) => void, setBusy: (b: boolean) =>
       const t = f / fps;
       const img = await renderTimelineFrame(
         {
-          loadImageAsset: async (id) => {
-            const blob = await getAssetBlob(id);
-            if (!blob) throw new Error(`Asset ${id} missing`);
-            return decodeImageBlob(blob);
-          },
+          loadImageAsset: (id) => loadImageAssetCached(id, ctrl.signal),
           signal: ctrl.signal,
         },
         tl, t, 640, 400,

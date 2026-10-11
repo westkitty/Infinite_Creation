@@ -4,7 +4,8 @@
 import { db } from './db';
 import type { AssetKind, AssetRecord } from '../types/graph';
 import { sha256Hex, uid } from '../lib/ids';
-import { makeThumbnail, probeImage } from '../media/codec';
+import { decodeImageBlob, makeThumbnail, probeImage } from '../media/codec';
+import type { ImageValue } from '../media/pixel';
 
 const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/avif']);
 const AUDIO_MIMES = new Set(['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4', 'audio/webm', 'audio/flac']);
@@ -227,6 +228,45 @@ export async function getAssetBlob(assetId: string): Promise<Blob | null> {
   const B = globalThis.Blob as any;
   if (!B) return null;
   return new B([row.data], { type: asset?.mime ?? 'application/octet-stream' });
+}
+
+// Decoded-pixel cache shared by engine runs and the timeline renderer.
+// Keyed `assetId:contentHash`: relink changes the row hash, so a new revision
+// can never read stale pixels, and replaced entries age out via the cap.
+// Returned images are SHARED — callers must treat them as read-only
+// (resize/composite allocate new outputs; this matches the engine's
+// long-standing reuse contract).
+const decodedPixels = new Map<string, { image: ImageValue; at: number }>();
+const DECODED_PIXELS_CAP = 12;
+
+/** Manual invalidation (tests; entries are content-keyed so project switches are safe). */
+export function clearDecodedPixels(): void {
+  decodedPixels.clear();
+}
+
+export async function loadImageAssetCached(assetId: string, signal?: AbortSignal): Promise<ImageValue> {
+  const meta = await db.assets.get(assetId);
+  const key = `${assetId}:${meta?.hash ?? ''}`;
+  const hit = decodedPixels.get(key);
+  if (hit) {
+    hit.at = Date.now();
+    return hit.image;
+  }
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  const blob = await getAssetBlob(assetId);
+  if (!blob) throw new Error(`Asset ${assetId} has no stored binary (missing or deleted)`);
+  const img = await decodeImageBlob(blob);
+  if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+  decodedPixels.set(key, { image: img, at: Date.now() });
+  if (decodedPixels.size > DECODED_PIXELS_CAP) {
+    let oldest: string | null = null;
+    let oldestAt = Infinity;
+    for (const [k, v] of decodedPixels) {
+      if (v.at < oldestAt) { oldestAt = v.at; oldest = k; }
+    }
+    if (oldest !== null) decodedPixels.delete(oldest);
+  }
+  return img;
 }
 
 export async function getAssetBytes(assetId: string): Promise<Uint8Array | null> {

@@ -52,6 +52,10 @@
   Documented in `media/color.ts` and `LIMITATIONS.md`.
 - **Cache identity**: `shortHash(nodeType, nodeVersion, effectiveParams,
   perPortInputHashes, engineVersion)`. LRU, 48 entries / 384 MB cap.
+- **Decoded-pixel cache**: `loadImageAssetCached` (repository) shared by the
+  scheduler and the timeline renderer, keyed `assetId:contentHash` so a
+  relinked revision can never read stale pixels. LRU, 12 entries; returned
+  images are shared read-only (resize/composite allocate new outputs).
 - **Cancellation**: `AbortController` per run + run-id generation check so
   stale completions can never publish.
 - **Disabled nodes**: forward a single image input, else downstream `blocked`.

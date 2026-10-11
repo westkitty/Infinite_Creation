@@ -50,7 +50,7 @@ button; dead preview code removed; accessible node roles/labels added.
 ## Uplift passes (2026-10-11, same branch, same sandbox)
 
 Pass 1 (`57a48fa`): run-history browser, lineage graph, live edge animation.
-Pass 2 (this change): modal focus traps, store-driven canvas selection,
+Pass 2 (`dd38d19`): modal focus traps, store-driven canvas selection,
 batch cancel, timeline `.zip` export, idle-gated 3D render loop.
 
 | # | Command | Result |
@@ -60,3 +60,17 @@ batch cancel, timeline `.zip` export, idle-gated 3D render loop.
 | 3 | `npm run build` | **pass** — no new dependencies (jszip reuse for timeline zip) |
 | 4 | `vite preview` + `curl /` | **200**, correct `index.html` |
 | 5 | `git diff --check` + full diff review | clean; no debug/secrets/churn |
+
+Pass 3 (this change): undo-history coalescing for micro-edits, revision-note
+debounce, shared `assetId:contentHash` decode cache (scheduler + timeline),
+sample-loader orphan cleanup. Plateau discipline: four verified hunts
+(param-edit staleness, result-cache audit, `moveNodes` history,
+module-table staleness) confirmed non-bugs and were deliberately left alone.
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `npm run typecheck` | **pass, 0 errors** |
+| 2 | `npx vitest run` | **18 files, 93/93 pass** (graph 8, ops 17, png 4, executors 9, scheduler 7, timeline 3, persistence 5, portability 6, subgraphs 6, samples 4, loader 2, history 4, lineage 3, provenance-panel 1, focusTrap 4, graphStore-history 3, asset-note 3, decode-cache 4) |
+| 3 | `npm run build` | **pass** — index `+812 B (+0.10%)`, three chunk byte-identical, no new dependencies |
+| 4 | `vite preview` + `curl /` | **200**, correct `index.html` |
+| 5 | `git diff --check` + full diff review | clean; no debug/secrets/churn; no existing test touched |

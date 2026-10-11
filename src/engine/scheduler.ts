@@ -8,9 +8,8 @@ import { topoOrder, validateGraph, downstreamNodeIds } from '../graph/validation
 import { EXECUTORS, describeValue, type ExecContext, type ExecValue } from './executors';
 import { hashValue, nodeCacheKey, resultCache } from './cache';
 import { hashPixels, type ImageValue } from '../media/pixel';
-import { decodeImageBlob } from '../media/codec';
 import { db } from '../assets/db';
-import { getAssetBlob, storeDerivedAsset } from '../assets/repository';
+import { loadImageAssetCached, storeDerivedAsset } from '../assets/repository';
 import { uid, stableStringify, shortHash } from '../lib/ids';
 import { expandSubgraphNodes } from '../subgraphs/library';
 import { useExecStore, type NodeOutput } from '../stores/execStore';
@@ -20,8 +19,6 @@ const MAX_NODE_CONCURRENCY = 3;
 // Latest decoded pixels per node (module-level; too heavy for zustand).
 const outputImages = new Map<string, { image: ImageValue; at: number }>();
 const outputArtifacts = new Map<string, { bytes: Uint8Array; mime: string; filename: string; width?: number; height?: number; assetId?: string }>();
-// Decoded source assets across runs (LRU-ish, small).
-const decodedSources = new Map<string, { image: ImageValue; at: number }>();
 
 export function getOutputImage(nodeId: string): ImageValue | null {
   return outputImages.get(nodeId)?.image ?? null;
@@ -37,22 +34,6 @@ export function clearOutputs(nodeIds?: string[]): void {
 let currentRun: { runId: string; controller: AbortController } | null = null;
 export function isRunning(): boolean { return currentRun !== null; }
 export function cancelRun(): void { currentRun?.controller.abort(); }
-
-async function loadImageAssetCached(assetId: string, signal: AbortSignal): Promise<ImageValue> {
-  const cached = decodedSources.get(assetId);
-  if (cached) return cached.image;
-  if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-  const blob = await getAssetBlob(assetId);
-  if (!blob) throw new Error(`Asset ${assetId} has no stored binary (missing or deleted)`);
-  const img = await decodeImageBlob(blob);
-  if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-  decodedSources.set(assetId, { image: img, at: Date.now() });
-  if (decodedSources.size > 12) {
-    const oldest = [...decodedSources.entries()].sort((a, b) => a[1].at - b[1].at)[0];
-    decodedSources.delete(oldest[0]);
-  }
-  return img;
-}
 
 export interface RunOptions {
   projectId: string;

@@ -185,13 +185,56 @@ function AssetCard({ asset, selected, onSelect }: { asset: AssetRecord; selected
   );
 }
 
-function AssetDetails({ asset }: { asset: AssetRecord }) {
+export function AssetDetails({ asset }: { asset: AssetRecord }) {
   const st = useAssetStore.getState();
   const log = useExecStore((s) => s.log);
   const [tagInput, setTagInput] = useState('');
   const nodes = useGraphStore((s) => s.nodes);
   const refs = findAssetReferences({ nodes }, asset.id);
   const relinkRef = useRef<HTMLInputElement>(null);
+  // Revision note: edited via a local draft and committed to IndexedDB on a
+  // 500ms debounce, so every keystroke does not round-trip storage + store.
+  const [noteDraft, setNoteDraft] = useState(asset.note ?? '');
+  const noteTimer = useRef<number | null>(null);
+  const noteDraftRef = useRef(asset.note ?? '');
+  const noteIdRef = useRef(asset.id);
+  const commitNote = (id: string, note: string) => {
+    // Spread the store's fresh row (not this render's prop) so a debounced
+    // commit cannot clobber concurrent edits such as tag add/remove.
+    const current = useAssetStore.getState().assets.find((row) => row.id === id) ?? asset;
+    void updateAsset(id, { note }).then(() => {
+      useAssetStore.getState().upsert({ ...current, note });
+    });
+  };
+  const queueNote = (id: string, value: string) => {
+    noteDraftRef.current = value;
+    if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => {
+      noteTimer.current = null;
+      commitNote(id, value);
+    }, 500);
+  };
+  useEffect(() => {
+    // Selection changed: flush any edit pending for the previous asset first.
+    if (noteTimer.current !== null && noteIdRef.current !== asset.id) {
+      window.clearTimeout(noteTimer.current);
+      noteTimer.current = null;
+      commitNote(noteIdRef.current, noteDraftRef.current);
+    }
+    noteIdRef.current = asset.id;
+    noteDraftRef.current = asset.note ?? '';
+    setNoteDraft(asset.note ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset.id]);
+  useEffect(() => () => {
+    // Unmount with a pending edit: commit it instead of dropping it.
+    if (noteTimer.current !== null) {
+      window.clearTimeout(noteTimer.current);
+      noteTimer.current = null;
+      commitNote(noteIdRef.current, noteDraftRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
       <input ref={relinkRef} type="file" hidden onChange={(e) => {
@@ -239,8 +282,8 @@ function AssetDetails({ asset }: { asset: AssetRecord }) {
       </div>
       <div className="field" style={{ marginTop: 8 }}>
         <label>Revision note</label>
-        <textarea rows={2} value={asset.note ?? ''} placeholder="Note for this revision…"
-          onChange={(e) => { const note = e.target.value; void updateAsset(asset.id, { note }).then(() => st.upsert({ ...asset, note })); }} />
+        <textarea rows={2} value={noteDraft} placeholder="Note for this revision…"
+          onChange={(e) => { const note = e.target.value; setNoteDraft(note); queueNote(asset.id, note); }} />
       </div>
       <div style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
